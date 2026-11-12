@@ -158,6 +158,9 @@ for p in "${ISO_PKGS[@]}"; do
     # A second kernel would need a second archiso initramfs; keep the live ISO
     # on one kernel. LTS still ships in the offline repo for target installs.
     [[ "$p" == linux-lts* ]] && continue
+    # DKMS modules would be built against headers the live system does not
+    # have; the ISO uses releng's prebuilt broadcom-wl, installs get the DKMS one.
+    [[ "$p" == *-dkms ]] && continue
     grep -qx -- "$p" "$PROFILE/packages.x86_64" 2>/dev/null || echo "$p" >> "$PROFILE/packages.x86_64"
 done
 ok "ISO package list: $(wc -l < "$PROFILE/packages.x86_64") entries"

@@ -21,6 +21,7 @@ package repository and writes the ISO to `release/`.
 | `KEEP_WORK=1` | Keep `work/` between builds |
 | `SKIP_DOWNLOAD=1` | Reuse the offline repository from the previous build |
 | `AEQUALYN_GIT` | Clone base URL (default `https://github.com/Aequalyn`) |
+| `AQ_MIRRORLIST` | A mirrorlist file to download from (default: a few Arch mirrors; the host's own mirrorlist is never used) |
 
 The live session logs in as `live` straight into the desktop; run
 `sudo aequalyn-install` (or `Super + I`) to install.
