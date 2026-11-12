@@ -1,0 +1,286 @@
+#!/usr/bin/env bash
+# aequalyn-iso-make -- build the Aequalyn live/install ISO with archiso.
+#
+# The desktop lives in several repositories. They are assembled into one
+# source tree first (the layout the installer expects in /opt/aequalyn):
+#
+#   aequalyn            -> .            core: bin/, config/, install.sh
+#   aequalyn-shell      -> shell/
+#   aequalyn-installer  -> installer/
+#   aequalyn-pkgs       -> packages/    (lists/ + aur-cache/)
+#   aequalyn-themes     -> themes/
+#
+# By default the repositories are taken from sibling checkouts next to this
+# one; --local-source DIR points elsewhere, and anything missing is cloned
+# from github.com/Aequalyn.
+#
+#   1. Copy the releng profile as a base.
+#   2. Overlay iso/overlay/ (live user, autologin, pacman configs, skel).
+#   3. Populate /etc/skel with the Aequalyn shell + configs via install.sh --skel,
+#      so mkarchiso copies them into /home/live/.config at boot.
+#   4. Copy the whole Aequalyn source tree into /opt/aequalyn (installer reads it).
+#   5. Download base + desktop + default packages into a bundled offline repo.
+#   6. Add the desktop packages to the ISO's packages.x86_64.
+#   7. Run mkarchiso and copy the finished ISO to the project root.
+#
+# Run as root:  sudo ./bin/aequalyn-iso-make [--local-source DIR]
+set -euo pipefail
+# never stop silently: say which line failed
+trap 'echo -e "\033[0;31mABORT:\033[0m line $LINENO failed (exit $?): $BASH_COMMAND"' ERR
+
+R='\033[0;31m'; G='\033[0;32m'; B='\033[0;34m'; N='\033[0m'
+info() { echo -e "${B}INFO:${N} $*"; }
+ok()   { echo -e "${G}OK:${N} $*"; }
+warn() { echo -e "${R}WARN:${N} $*"; }
+abort(){ echo -e "${R}ABORT:${N} $*"; exit 1; }
+
+[[ $EUID -eq 0 ]] || abort "run as root (sudo $0)"
+
+ISO_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$ISO_REPO"
+SOURCES="$(dirname "$ISO_REPO")"
+AEQUALYN_GIT=${AEQUALYN_GIT:-https://github.com/Aequalyn}
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --local-source) SOURCES=$(cd "$2" && pwd); shift 2 ;;
+        -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
+        *) abort "unknown option: $1" ;;
+    esac
+done
+WORK="$ISO_REPO/work"
+PROFILE="$WORK/profile"
+OUT="$WORK/out"
+CACHE="$WORK/pkg-cache"
+SKEL="$PROFILE/airootfs/etc/skel"
+OFFLINE="$PROFILE/airootfs/var/cache/offline-repo"
+LOGFILE="$ISO_REPO/build.log"
+exec > >(tee -a "$LOGFILE") 2>&1
+info "build log: $LOGFILE"
+
+# ---------------------------------------------------------------- prereqs ---
+command -v mkarchiso >/dev/null || { info "installing archiso"; pacman -S --noconfirm archiso; }
+command -v repo-add  >/dev/null || { info "installing pacman-contrib"; pacman -S --noconfirm pacman-contrib; }
+RELENG=/usr/share/archiso/configs/releng
+[[ -d "$RELENG" ]] || abort "releng profile missing ($RELENG)"
+
+# ---------------------------------------------------------------- work dir ---
+# A failed mkarchiso can leave /proc, /sys and /dev mounted inside its chroot.
+# Unmount anything under work/ before deleting it: rm -rf through a mounted
+# /dev would delete the host's device nodes.
+unmount_work() {
+    local m
+    findmnt -rno TARGET 2>/dev/null | awk -v w="$WORK/" 'index($0, w) == 1' | sort -r | while read -r m; do
+        umount -R "$m" 2>/dev/null || umount -l "$m" 2>/dev/null || true
+    done
+}
+wipe() { unmount_work; rm -rf --one-file-system "$1"; }
+if [[ -d "$WORK" && "${KEEP_WORK:-0}" != "1" ]]; then
+    info "cleaning $WORK"
+    wipe "$WORK"
+fi
+mkdir -p "$PROFILE" "$OUT" "$CACHE" "$SKEL" "$OFFLINE"
+
+# ------------------------------------------------------------- mirrors ---
+# The build downloads from Arch mirrors of its own, never the host's mirrorlist
+# (on Omarchy that is Omarchy's own mirror). AQ_MIRRORLIST=<file> overrides.
+MIRRORLIST="$WORK/mirrorlist"
+if [[ -n "${AQ_MIRRORLIST:-}" ]]; then
+    cp "$AQ_MIRRORLIST" "$MIRRORLIST"
+else
+    cat > "$MIRRORLIST" <<'MIRRORS'
+Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
+Server = https://mirror.rackspace.com/archlinux/$repo/os/$arch
+Server = https://archlinux.mirror.liteserver.nl/$repo/os/$arch
+Server = https://mirror.netcologne.de/archlinux/$repo/os/$arch
+Server = https://mirrors.kernel.org/archlinux/$repo/os/$arch
+MIRRORS
+fi
+info "mirrors: $(grep -c '^Server' "$MIRRORLIST") ($MIRRORLIST)"
+
+# ---------------------------------------------------------- source tree ---
+PROJECT="$WORK/source"
+repo_dir() { # repo_dir <name> -> checkout path (sibling or fresh clone)
+    if [[ -d "$SOURCES/$1" ]]; then printf '%s' "$SOURCES/$1"; return; fi
+    local dest="$WORK/clones/$1"
+    [[ -d "$dest" ]] || git clone -q --depth 1 "$AEQUALYN_GIT/$1.git" "$dest" || abort "cannot get $1"
+    printf '%s' "$dest"
+}
+info "assembling the source tree from $SOURCES"
+rm -rf "$PROJECT"; mkdir -p "$PROJECT/packages"
+CORE=$(repo_dir aequalyn)
+for item in bin config assets docs install.sh VERSION README.md SKILL.md; do
+    [[ -e "$CORE/$item" ]] && cp -a "$CORE/$item" "$PROJECT/"
+done
+mkdir -p "$PROJECT/shell"; cp -a "$(repo_dir aequalyn-shell)/." "$PROJECT/shell/"
+mkdir -p "$PROJECT/installer"; cp -a "$(repo_dir aequalyn-installer)/." "$PROJECT/installer/"
+PKGS=$(repo_dir aequalyn-pkgs)
+cp -a "$PKGS/lists/." "$PROJECT/packages/"
+[[ -d "$PKGS/aur-cache" ]] && cp -a "$PKGS/aur-cache" "$PROJECT/packages/"
+THEMES=$(repo_dir aequalyn-themes)
+mkdir -p "$PROJECT/themes"; cp -a "$THEMES/themes/." "$PROJECT/themes/"
+find "$PROJECT" -name .git -prune -exec rm -rf {} +
+ok "source tree: $PROJECT"
+cp -a "$RELENG/." "$PROFILE/"
+
+# ---------------------------------------------------------------- overlay ----
+info "overlaying Aequalyn airootfs files"
+cp -a "$SCRIPT_DIR/overlay/airootfs/." "$PROFILE/airootfs/"
+
+# /etc/skel -> /home/live/.config (mkarchiso copies skel for UID >= 1000 users)
+info "populating /etc/skel with the Aequalyn desktop"
+"$PROJECT/install.sh" --target "$SKEL" --skel
+# skel must be root-owned; mkarchiso chowns it to the live user
+chown -R 0:0 "$SKEL"
+
+# Whole source tree for the installer. Copy an explicit whitelist: the profile
+# keeps git metadata and build leftovers out of the image.
+info "copying Aequalyn source into /opt/aequalyn"
+mkdir -p "$PROFILE/airootfs/opt/aequalyn"
+for item in shell config bin assets packages installer themes docs install.sh VERSION README.md; do
+    [[ -e "$PROJECT/$item" ]] && cp -a "$PROJECT/$item" "$PROFILE/airootfs/opt/aequalyn/"
+done
+chmod 755 "$PROFILE/airootfs/usr/local/bin/"* "$PROFILE/airootfs/opt/aequalyn/install.sh" \
+          "$PROFILE/airootfs/opt/aequalyn/bin/"* 2>/dev/null || true
+
+# ---------------------------------------------------------------- packages ---
+read_list() { # read_list <file>
+    [[ -f "$1" ]] || return 0
+    sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$1" | grep -v '^$' || true
+}
+
+ISO_PKGS=()
+ISO_PKGS+=($(read_list "$PROJECT/packages/desktop.packages"))
+ISO_PKGS+=($(read_list "$PROJECT/packages/offline-extra.packages"))
+# Tools needed by the live environment / installer
+ISO_PKGS+=(arch-install-scripts limine efibootmgr parted gptfdisk openssl \
+           gum dialog jq python dbus snapper snap-pac zram-generator mkinitcpio)
+for p in "${ISO_PKGS[@]}"; do
+    # A second kernel would need a second archiso initramfs; keep the live ISO
+    # on one kernel. LTS still ships in the offline repo for target installs.
+    [[ "$p" == linux-lts* ]] && continue
+    grep -qx -- "$p" "$PROFILE/packages.x86_64" 2>/dev/null || echo "$p" >> "$PROFILE/packages.x86_64"
+done
+ok "ISO package list: $(wc -l < "$PROFILE/packages.x86_64") entries"
+
+# Enable only the [multilib] section in the build config (optional profiles).
+python3 - "$PROFILE/pacman.conf" "$MIRRORLIST" <<'PY'
+import sys, pathlib, re
+p = pathlib.Path(sys.argv[1]); s = p.read_text()
+s = s.replace('#[multilib]\n#Include = /etc/pacman.d/mirrorlist',
+              '[multilib]\nInclude = /etc/pacman.d/mirrorlist')
+# build from the build's own mirrors, not the host's
+s = s.replace('Include = /etc/pacman.d/mirrorlist', 'Include = ' + sys.argv[2])
+p.write_text(s)
+PY
+
+# ------------------------------------------------------- offline repository ---
+OFFLINE_PKGS=()
+OFFLINE_PKGS+=($(read_list "$PROJECT/packages/base.packages"))
+OFFLINE_PKGS+=($(read_list "$PROJECT/packages/desktop.packages"))
+OFFLINE_PKGS+=($(read_list "$PROJECT/packages/profiles/minimal.packages"))
+OFFLINE_PKGS+=($(read_list "$PROJECT/packages/offline-extra.packages"))
+mapfile -t OFFLINE_PKGS < <(printf '%s\n' "${OFFLINE_PKGS[@]}" | sort -u)
+ok "offline repo: ${#OFFLINE_PKGS[@]} packages (+ dependencies)"
+
+DL_CONF="$WORK/pacman-dl.conf"
+cat > "$DL_CONF" <<'PACDL'
+[options]
+HoldPkg = pacman glibc
+Architecture = auto
+CheckSpace
+ParallelDownloads = 8
+DownloadUser = root
+SigLevel = Never
+LocalFileSigLevel = Optional
+
+[core]
+Include = /etc/pacman.d/mirrorlist
+[extra]
+Include = /etc/pacman.d/mirrorlist
+[multilib]
+Include = /etc/pacman.d/mirrorlist
+PACDL
+sed -i "s|Include = /etc/pacman.d/mirrorlist|Include = $MIRRORLIST|" "$DL_CONF"
+
+if [[ "${SKIP_DOWNLOAD:-0}" == "1" && -f "$OFFLINE/offline.db" ]]; then
+    ok "reusing existing offline repo (SKIP_DOWNLOAD=1)"
+else
+    TMP_DB="$WORK/tmp-db"
+    mkdir -p "$TMP_DB"
+    info "syncing package databases into a temporary db"
+    pacman -Sy --config "$DL_CONF" --dbpath "$TMP_DB" --cachedir "$CACHE" --noconfirm
+    info "downloading packages + all dependencies (this is the slow part)"
+    # --noconfirm answers every prompt (providers take their default). No `yes |`
+    # in front: with pipefail, yes dying of SIGPIPE when pacman is done would
+    # fail the pipeline and end the build silently.
+    pacman -Sw --config "$DL_CONF" --dbpath "$TMP_DB" --cachedir "$CACHE" --noconfirm \
+           "${OFFLINE_PKGS[@]}"
+    rm -rf "$TMP_DB"
+
+    info "creating offline repository"
+    find "$CACHE" -name '*.pkg.tar.zst' -exec cp -n {} "$OFFLINE/" \;
+    COUNT=$(find "$OFFLINE" -name '*.pkg.tar.zst' | wc -l)
+    [[ "$COUNT" -gt 0 ]] || abort "no packages downloaded"
+    ( cd "$OFFLINE" && repo-add offline.db.tar.gz ./*.pkg.tar.zst )
+    ok "offline repo: $COUNT packages"
+fi
+
+# -------------------------------------------------------- AUR package cache ---
+# Boot-critical AUR packages (Limine snapshot stack) cannot be built inside
+# pacstrap: they are built on the host once and cached here, then added to the
+# offline repo so both the live ISO and installed systems have them.
+AUR_CACHE="$PROJECT/packages/aur-cache"
+if compgen -G "$AUR_CACHE/*.pkg.tar.zst" >/dev/null; then
+    info "adding cached AUR packages to the offline repo"
+    cp -n "$AUR_CACHE/"*.pkg.tar.zst "$OFFLINE/"
+    ( cd "$OFFLINE" && repo-add offline.db.tar.gz ./*.pkg.tar.zst >/dev/null )
+    ok "AUR cache baked: $(find "$AUR_CACHE" -name '*.pkg.tar.zst' | wc -l) packages"
+else
+    warn "no packages/aur-cache/*.pkg.tar.zst: snapshot support will be online-only"
+fi
+
+# ---------------------------------------------------------------- metadata ---
+python3 - "$PROFILE/profiledef.sh" <<'PY'
+import sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text()
+s = s.replace('iso_name="archlinux"', 'iso_name="aequalyn"')
+s = s.replace('iso_label="ARCH_$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y%m)"',
+              'iso_label="AEQUALYN_$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y%m)"')
+s = s.replace('iso_publisher="Arch Linux <https://archlinux.org>"',
+              'iso_publisher="Aequalyn <https://github.com/Aequalyn>"')
+s = s.replace('iso_application="Arch Linux Live/Rescue DVD"',
+              'iso_application="Aequalyn Live / Installer"')
+extra = '''  ["/usr/local/bin/aequalyn-live-login"]="0:0:755"
+  ["/usr/local/bin/aequalyn-install"]="0:0:755"
+  ["/usr/local/bin/aequalyn-detect"]="0:0:755"
+  ["/usr/local/bin/aequalyn-repair"]="0:0:755"
+  ["/etc/sudoers.d/live"]="0:0:440"
+  ["/etc/profile.d/aequalyn.sh"]="0:0:644"
+  ["/etc/skel/.local/bin/"]="0:0:755"
+  ["/opt/aequalyn/install.sh"]="0:0:755"
+  ["/opt/aequalyn/bin/"]="0:0:755"
+  ["/opt/aequalyn/installer/"]="0:0:755"
+'''
+s = s.replace('file_permissions=(\n', 'file_permissions=(\n' + extra)
+p.write_text(s)
+PY
+# releng's shadow permission stays 400; ensure our new scripts are executable
+ok "profile metadata updated"
+
+# ---------------------------------------------------------------- build ------
+info "running mkarchiso (this can take a while)"
+[[ -d "$WORK/mkarchiso-work" ]] && wipe "$WORK/mkarchiso-work"
+rm -f "$OUT"/*.iso 2>/dev/null || true
+if ! mkarchiso -v -w "$WORK/mkarchiso-work" -o "$OUT" "$PROFILE"; then
+    unmount_work
+    abort "mkarchiso failed; leftover mounts under work/ were released. Run again with KEEP_WORK=1 SKIP_DOWNLOAD=1 to skip the download"
+fi
+
+ISO=$(ls -1 "$OUT"/*.iso 2>/dev/null | head -1 || true)
+[[ -n "$ISO" ]] || abort "no ISO produced in $OUT"
+mkdir -p "$ISO_REPO/release"
+DEST="$ISO_REPO/release/$(basename "$ISO")"
+cp "$ISO" "$DEST"
+ok "ISO created: $DEST"
+ls -lh "$DEST"
+info "sha256: $(sha256sum "$DEST" | cut -d' ' -f1)"
