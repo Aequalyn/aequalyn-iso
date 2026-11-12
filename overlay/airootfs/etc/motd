@@ -1,0 +1,14 @@
+
+   ███╗   ███╗██╗   ██╗███████╗███████╗
+   ████╗ ████║██║   ██║╚══███╔╝██╔════╝
+   ██╔████╔██║██║   ██║  ███╔╝ █████╗
+   ██║╚██╔╝██║██║   ██║ ███╔╝  ██╔══╝
+   ██║ ╚═╝ ██║╚██████╔╝███████╗███████╗
+   ╚═╝     ╚═╝ ╚═════╝ ╚══════╝╚══════╝
+
+   Arch Linux + Hyprland + QuickShell  ·  wallpaper-driven colours
+
+   Live desktop boots automatically on tty1.
+   Install:  sudo aequalyn-install        Repair:  sudo aequalyn-repair
+   Docs:     /opt/aequalyn/README.md     Config:  /opt/aequalyn/installer/install.toml.example
+

@@ -1,0 +1,12 @@
+# The keyring's install script starts gpg-agent inside the image being built.
+# Left running, it keeps /proc busy and the ISO build fails while cleaning up.
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = *
+
+[Action]
+Description = Stopping gpg-agent and dirmngr left by the keyring...
+When = PostTransaction
+Exec = /usr/bin/sh -c '/usr/bin/gpgconf --homedir /etc/pacman.d/gnupg --kill all >/dev/null 2>&1; true'
