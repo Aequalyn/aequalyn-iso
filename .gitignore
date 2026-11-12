@@ -1,0 +1,5 @@
+work/
+release/
+build.log
+*.iso
+*.iso.sha256sum
