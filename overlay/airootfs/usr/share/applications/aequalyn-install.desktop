@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Install Aequalyn
+GenericName=System Installer
+Comment=Install Aequalyn on this computer
+Exec=kitty --class aequalyn-install -e sudo aequalyn-install
+Icon=aequalyn-mark-dark
+StartupWMClass=aequalyn-install
+Terminal=false
+Categories=System;
+Keywords=install;setup;aequalyn;
