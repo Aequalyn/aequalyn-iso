@@ -130,7 +130,7 @@ cp -a "$SCRIPT_DIR/overlay/airootfs/." "$PROFILE/airootfs/"
 info "populating /etc/skel with the Aequalyn desktop"
 "$PROJECT/install.sh" --target "$SKEL" --skel
 
-# The core settings.json pins a generic dock list (firefox/thunar). On the live
+# The core settings.json pins a generic dock list (firefox/nautilus). On the live
 # ISO pin the apps that are actually installed, plus the "Install Aequalyn"
 # launcher. Each id gets ".desktop" appended by the shell's first-run dock
 # migration; the three app icons come from their packages' hicolor icons and the
@@ -279,6 +279,7 @@ s = s.replace('iso_application="Arch Linux Live/Rescue DVD"',
               'iso_application="Aequalyn Live / Installer"')
 extra = '''  ["/usr/local/bin/aequalyn-live-session"]="0:0:755"
   ["/usr/local/bin/aequalyn-install"]="0:0:755"
+  ["/usr/local/bin/aequalyn-update"]="0:0:755"
   ["/usr/local/bin/aequalyn-detect"]="0:0:755"
   ["/usr/local/bin/aequalyn-repair"]="0:0:755"
   ["/usr/local/bin/aequalyn-live-update"]="0:0:755"
