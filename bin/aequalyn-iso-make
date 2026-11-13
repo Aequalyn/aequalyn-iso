@@ -122,6 +122,22 @@ find "$PROJECT" -name .git -prune -exec rm -rf {} +
 ok "source tree: $PROJECT"
 cp -a "$RELENG/." "$PROFILE/"
 
+# Silence the PC-speaker beep in the boot loader menus:
+#   - systemd-boot: "beep on" in loader.conf beeps on every menu entry
+#   - GRUB: the accessibility init tune (play ...) beeps through the PC speaker
+info "disabling boot beep in loader.conf / grub.cfg"
+if [[ -f "$PROFILE/efiboot/loader/loader.conf" ]]; then
+    if grep -q '^[[:space:]]*beep[[:space:]]' "$PROFILE/efiboot/loader/loader.conf"; then
+        sed -i 's/^[[:space:]]*beep[[:space:]].*/beep off/' "$PROFILE/efiboot/loader/loader.conf"
+    else
+        printf 'beep off\n' >> "$PROFILE/efiboot/loader/loader.conf"
+    fi
+fi
+for g in "$PROFILE/grub/grub.cfg" "$PROFILE/grub/loopback.cfg"; do
+    [[ -f "$g" ]] || continue
+    sed -i '/^[[:space:]]*#[[:space:]]*GRUB init tune for accessibility[[:space:]]*$/d; /^[[:space:]]*play[[:space:]]/d' "$g"
+done
+
 # ---------------------------------------------------------------- overlay ----
 info "overlaying Aequalyn airootfs files"
 cp -a "$SCRIPT_DIR/overlay/airootfs/." "$PROFILE/airootfs/"
