@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Aequalyn
+Comment=Aequalyn live desktop (Hyprland + QuickShell)
+Exec=/usr/local/bin/aequalyn-live-session
+Type=Application
+DesktopNames=Hyprland
+Keywords=tiling;wayland;compositor;

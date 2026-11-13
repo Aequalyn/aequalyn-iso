@@ -23,8 +23,10 @@ package repository and writes the ISO to `release/`.
 | `AEQUALYN_GIT` | Clone base URL (default `https://github.com/Aequalyn`) |
 | `AQ_MIRRORLIST` | A mirrorlist file to download from (default: a few Arch mirrors; the host's own mirrorlist is never used) |
 
-The live session logs in as `live` straight into the desktop; run
-`sudo aequalyn-install` (or `Super + I`) to install.
+SDDM owns the boot login: it autologs `live` into the `aequalyn` Wayland
+session, which starts a single guarded Hyprland + QuickShell desktop. A root
+rescue shell stays on tty2 (`Ctrl+Alt+F2`). Run `sudo aequalyn-install`
+(or `Super + I`) to install.
 
 ## Credits
 

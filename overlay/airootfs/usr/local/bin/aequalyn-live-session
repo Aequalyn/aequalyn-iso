@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+# aequalyn-live-session -- the one and only Hyprland session on the live ISO.
+#
+# SDDM autologs the `live` user into aequalyn.desktop, which runs this script.
+# It is the ONLY place on the ISO that starts the compositor; the old
+# getty@tty1 autologin (aequalyn-live-login) is gone.
+#
+# Guards -- Hyprland 0.57's `start-hyprland` is a watchdog that re-forks
+# Hyprland forever on an unclean exit ("Hyprland exit not-cleanly, restarting").
+# On the getty ISO a bad GPU turned that into a compositor spawn storm that
+# froze the box. Three layers keep the live ISO to a single instance:
+#   1. an exclusive flock: a second invoker (SDDM relogin racing, a stray
+#      console login, ...) exits instead of starting a second compositor;
+#   2. a pgrep pre-flight: never start if a Hyprland is already up;
+#   3. an instance cap: start-hyprland is allowed exactly ONE Hyprland
+#      instance. If it forks another (crash/restart loop) the launcher is
+#      stopped, so SDDM shows the greeter instead of the machine freezing.
+#
+# QuickShell is started once (aequalyn-session-start, also called from
+# hyprland.lua). That script is idempotent and uses `qs -n`, so at most one
+# shell ever runs.
+set -u
+
+# --------------------------------------------------------------- environment
+export HOME="${HOME:-/home/live}"
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+export XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export PATH="$HOME/.local/bin:$PATH"
+export XDG_CURRENT_DESKTOP=Hyprland
+export XDG_SESSION_TYPE=wayland
+# pam_systemd + user@.service own the systemd user bus at this path. Sharing it
+# (rather than a private dbus-run-session bus) keeps systemctl --user, the
+# portals and hyprpolkitagent on the same bus as the compositor. The socket can
+# appear a moment after the logind session is created, so wait briefly for it.
+for i in {1..20}; do
+    [[ -S "$XDG_RUNTIME_DIR/bus" ]] && break
+    sleep 0.25
+done
+if [[ -S "$XDG_RUNTIME_DIR/bus" ]]; then
+    export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
+fi
+mkdir -p "$XDG_RUNTIME_DIR" "$XDG_STATE_HOME/aequalyn" 2>/dev/null || true
+
+LOG="$XDG_STATE_HOME/aequalyn/live-session.log"
+say() { printf '[aequalyn-live-session] %s\n' "$*" >>"$LOG" 2>/dev/null || true; }
+say "invoked (pid $$, user $(id -un), runtime $XDG_RUNTIME_DIR)"
+
+# ---------------------------------------------------------- single instance
+# FD 9 is held by this process for its whole lifetime; every child closes it so
+# a daemonized QuickShell can never keep the lock after the session is gone.
+LOCK="$XDG_RUNTIME_DIR/aequalyn-live-session.lock"
+exec 9>"$LOCK" || exit 1
+if ! flock -n 9; then
+    say "another live session holds $LOCK; refusing a second Hyprland"
+    exit 0
+fi
+if pgrep -x -u "$(id -u)" Hyprland >/dev/null 2>&1; then
+    say "Hyprland already running for $(id -un); refusing a second one"
+    exit 0
+fi
+say "single-instance lock acquired"
+
+if ! command -v start-hyprland >/dev/null 2>&1; then
+    say "start-hyprland not found in PATH; nothing to start"
+    exit 1
+fi
+
+# --------------------------------------------------------------- QuickShell
+# hyprland.lua also asks Hyprland to run aequalyn-session-start via
+# hl.on("hyprland.start"), but that hook can fire before the Wayland/session
+# sockets exist. Wait for Hyprland's own lock file (PID on line 1, Wayland
+# socket name on line 2) and start the desktop once. aequalyn-session-start is
+# idempotent and `qs -n` refuses duplicates, so both paths cannot yield two
+# shells.
+hypr_socket() {
+    local f pid wd
+    for f in $(ls -1t "$XDG_RUNTIME_DIR"/hypr/*/hyprland.lock 2>/dev/null); do
+        [[ -f "$f" ]] || continue
+        read -r pid < "$f" 2>/dev/null || continue
+        [[ "$pid" =~ ^[0-9]+$ ]] || continue
+        kill -0 "$pid" 2>/dev/null || continue
+        wd=$(sed -n '2p' "$f")
+        [[ -n "$wd" && -S "$XDG_RUNTIME_DIR/$wd" ]] || continue
+        f=${f%/hyprland.lock}
+        printf '%s %s' "${f##*/}" "$wd"
+        return 0
+    done
+    return 1
+}
+
+start_shell() {
+    local i out sig wd
+    local -a e
+    for ((i = 0; i < 240; i++)); do
+        if out=$(hypr_socket); then
+            read -r sig wd <<<"$out"
+            break
+        fi
+        sleep 0.25
+    done
+    [[ -n "${sig:-}" && -n "${wd:-}" ]] || { say "Hyprland sockets never appeared"; return 1; }
+    e=(
+        HOME="$HOME" USER="${USER:-live}" PATH="$PATH"
+        HYPRLAND_INSTANCE_SIGNATURE="$sig"
+        WAYLAND_DISPLAY="$wd"
+        XDG_CURRENT_DESKTOP=Hyprland XDG_SESSION_TYPE=wayland
+        XDG_CONFIG_HOME="$XDG_CONFIG_HOME" XDG_DATA_HOME="$XDG_DATA_HOME"
+        XDG_STATE_HOME="$XDG_STATE_HOME" XDG_CACHE_HOME="$XDG_CACHE_HOME"
+        XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR"
+    )
+    [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]] && e+=(DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS")
+    say "starting the QuickShell shell (sig $sig, display $wd)"
+    env "${e[@]}" setsid -f bash "$HOME/.local/bin/aequalyn-session-start" \
+        9>&- >/dev/null 2>&1 || say "aequalyn-session-start failed to spawn"
+}
+start_shell 9>&- &
+
+# ------------------------------------------------------- Hyprland (once)
+# Hyprland 0.57 creates $XDG_RUNTIME_DIR/hypr/<signature>/ on every start.
+# Snapshot the signatures that predate this session, then allow exactly one new
+# one. A second new signature means start-hyprland restarted the compositor:
+# stop the launcher rather than letting it fork Hyprland forever.
+known=" "
+for f in "$XDG_RUNTIME_DIR"/hypr/*; do
+    [[ -d "$f" ]] && known+="${f##*/} "
+done
+
+cap_hyprland_instances() {
+    local launcher=$1 first="" f sig
+    while kill -0 "$launcher" 2>/dev/null; do
+        for f in "$XDG_RUNTIME_DIR"/hypr/*; do
+            [[ -d "$f" ]] || continue
+            sig=${f##*/}
+            [[ "$known" == *" $sig "* ]] && continue
+            if [[ -z "$first" ]]; then
+                first=$sig
+                say "Hyprland instance $sig is the one allowed instance"
+            elif [[ "$sig" != "$first" ]]; then
+                say "start-hyprland spawned another Hyprland ($sig); stopping it"
+                kill -TERM "$launcher" 2>/dev/null || true
+                return 1
+            fi
+        done
+        sleep 0.5
+    done
+    return 0
+}
+
+say "starting start-hyprland (one Hyprland instance only)"
+# 9>&- : neither Hyprland nor anything it spawns inherits the session lock.
+start-hyprland 9>&- &
+launcher=$!
+cap_hyprland_instances "$launcher" 9>&- &
+cap_pid=$!
+wait "$launcher"; rc=$?
+kill "$cap_pid" 2>/dev/null || true
+wait "$cap_pid" 2>/dev/null || true
+say "start-hyprland exited with status $rc"
+exit "$rc"

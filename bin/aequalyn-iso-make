@@ -151,8 +151,10 @@ read_list() { # read_list <file>
 ISO_PKGS=()
 ISO_PKGS+=($(read_list "$PROJECT/packages/desktop.packages"))
 ISO_PKGS+=($(read_list "$PROJECT/packages/offline-extra.packages"))
-# Tools needed by the live environment / installer
-ISO_PKGS+=(arch-install-scripts limine efibootmgr parted gptfdisk openssl \
+# Tools needed by the live environment / installer. sddm replaces the tty1
+# getty autologin; it pulls in xorg-server itself for its greeter, so there is
+# no need to list xorg explicitly.
+ISO_PKGS+=(sddm arch-install-scripts limine efibootmgr parted gptfdisk openssl \
            gum dialog jq python dbus snapper snap-pac zram-generator mkinitcpio)
 for p in "${ISO_PKGS[@]}"; do
     # A second kernel would need a second archiso initramfs; keep the live ISO
@@ -254,11 +256,13 @@ s = s.replace('iso_publisher="Arch Linux <https://archlinux.org>"',
               'iso_publisher="Aequalyn <https://github.com/Aequalyn>"')
 s = s.replace('iso_application="Arch Linux Live/Rescue DVD"',
               'iso_application="Aequalyn Live / Installer"')
-extra = '''  ["/usr/local/bin/aequalyn-live-login"]="0:0:755"
+extra = '''  ["/usr/local/bin/aequalyn-live-session"]="0:0:755"
   ["/usr/local/bin/aequalyn-install"]="0:0:755"
   ["/usr/local/bin/aequalyn-detect"]="0:0:755"
   ["/usr/local/bin/aequalyn-repair"]="0:0:755"
   ["/usr/local/bin/aequalyn-live-update"]="0:0:755"
+  ["/etc/sddm.conf.d/autologin.conf"]="0:0:644"
+  ["/usr/share/wayland-sessions/aequalyn.desktop"]="0:0:644"
   ["/etc/sudoers.d/live"]="0:0:440"
   ["/etc/profile.d/aequalyn.sh"]="0:0:644"
   ["/etc/skel/.local/bin/"]="0:0:755"

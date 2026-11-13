@@ -5,7 +5,7 @@
 # profiledef.sh cannot cover every generated file).
 set -e
 
-# Live user helpers (aequalyn-session-start is exec'd by Hyprland on tty1).
+# Live user helpers (aequalyn-session-start is exec'd by the Hyprland session).
 chmod 755 /etc/skel/.local/bin/* 2>/dev/null || true
 if [[ -d /home/live/.local/bin ]]; then
     chmod 755 /home/live/.local/bin/* 2>/dev/null || true
@@ -28,5 +28,10 @@ fi
 
 # The live user may install without a password.
 chmod 440 /etc/sudoers.d/live 2>/dev/null || true
+
+# SDDM owns the boot login: it autologins `live` into the guarded Hyprland
+# session. This runs in the archiso chroot, so `systemctl enable` just writes
+# the display-manager.service alias (no daemon is started here).
+systemctl enable sddm.service 2>/dev/null || true
 
 exit 0
