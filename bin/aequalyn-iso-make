@@ -213,10 +213,12 @@ else
     info "syncing package databases into a temporary db"
     pacman -Sy --config "$DL_CONF" --dbpath "$TMP_DB" --cachedir "$CACHE" --noconfirm
     info "downloading packages + all dependencies (this is the slow part)"
-    # --noconfirm should pick defaults, but provider/proceed prompts can still
-    # block non-interactive runs; feed an endless stream of defaults safely.
-    ( set +o pipefail; yes "" ) | pacman -Sw --config "$DL_CONF" --dbpath "$TMP_DB" --cachedir "$CACHE" --noconfirm \
-           "${OFFLINE_PKGS[@]}"
+    # --noconfirm takes every default; defaults are also fed on stdin for any
+    # prompt it misses. Through process substitution, not a pipe: `yes` dies of
+    # SIGPIPE once pacman exits, and in a pipeline pipefail would turn that
+    # into a failed build (a subshell's own `set +o pipefail` does not help).
+    pacman -Sw --config "$DL_CONF" --dbpath "$TMP_DB" --cachedir "$CACHE" --noconfirm \
+           "${OFFLINE_PKGS[@]}" < <(yes "")
     rm -rf "$TMP_DB"
 
     info "creating offline repository"
