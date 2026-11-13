@@ -14,6 +14,42 @@ export PATH="$HOME/.local/bin:$PATH"
 mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
 chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
 
+# Start the Aequalyn desktop (QuickShell, wallpaper, portals, idle) once
+# Hyprland is actually up. hyprland.lua also asks Hyprland to do this via
+# hl.on("hyprland.start"), but on the live ISO that hook is not reliable: it can
+# fire before the Wayland/session sockets are ready and its failures are
+# invisible. The live launcher owns the session, so it starts the desktop too.
+# aequalyn-session-start is idempotent, so the second call is harmless.
+start_aequalyn_session() {
+    local sig wd i
+    local -a env_args
+    for ((i = 0; i < 240; i++)); do
+        sig=$(find "$XDG_RUNTIME_DIR/hypr" -mindepth 1 -maxdepth 1 -type d \
+                  -printf '%f\n' 2>/dev/null | head -1)
+        wd=$(find "$XDG_RUNTIME_DIR" -mindepth 1 -maxdepth 1 -name 'wayland-*' \
+                  -type s -printf '%f\n' 2>/dev/null | head -1)
+        [[ -n "$sig" && -n "$wd" ]] && break
+        sleep 0.25
+    done
+    [[ -n "$sig" && -n "$wd" ]] || return 1
+    # The login shell runs outside dbus-run-session's private bus; the systemd
+    # user bus is the one systemctl --user and the portals live on.
+    env_args=(
+        HYPRLAND_INSTANCE_SIGNATURE="$sig"
+        WAYLAND_DISPLAY="$wd"
+        XDG_CURRENT_DESKTOP=Hyprland
+        XDG_SESSION_TYPE=wayland
+        XDG_CONFIG_HOME="$XDG_CONFIG_HOME"
+        XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR"
+    )
+    [[ -S "$XDG_RUNTIME_DIR/bus" ]] &&
+        env_args+=(DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus")
+    # `bash` rather than executing directly: mkarchiso strips exec bits from
+    # custom airootfs files, so the ISO's wrappers always go through the shell.
+    env "${env_args[@]}" setsid -f bash "$HOME/.local/bin/aequalyn-session-start" \
+        >/dev/null 2>&1
+}
+
 # Hyprland wants to be started through start-hyprland (0.57+); older builds
 # only have the Hyprland binary.
 launch() {
@@ -23,6 +59,8 @@ launch() {
 
 if command -v Hyprland >/dev/null 2>&1; then
     printf '\n\033[38;5;212mWelcome to Aequalyn\033[0m -- starting the desktop...\n'
+    # Watchdog: bring up the desktop as soon as Hyprland publishes its sockets.
+    start_aequalyn_session &
     started=$SECONDS
     launch
     # Gone within seconds: no usable GPU (a VM without 3D acceleration, say).
