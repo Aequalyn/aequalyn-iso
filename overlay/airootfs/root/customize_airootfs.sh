@@ -34,4 +34,10 @@ chmod 440 /etc/sudoers.d/live 2>/dev/null || true
 # the display-manager.service alias (no daemon is started here).
 systemctl enable sddm.service 2>/dev/null || true
 
+# NetworkManager must come up at boot: the shell bar's network indicator talks
+# to it via nmcli/D-Bus and the live session needs connectivity for updates and
+# online installs. Like sddm above, this only records the default target
+# symlink -- nothing is started inside the build chroot.
+systemctl enable NetworkManager.service 2>/dev/null || true
+
 exit 0

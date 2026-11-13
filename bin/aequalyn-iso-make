@@ -173,6 +173,10 @@ ISO_PKGS+=($(read_list "$PROJECT/packages/offline-extra.packages"))
 # no need to list xorg explicitly.
 ISO_PKGS+=(sddm arch-install-scripts limine efibootmgr parted gptfdisk openssl \
            gum dialog jq python dbus snapper snap-pac zram-generator mkinitcpio)
+# Networking for the live session: the shell bar reads the link state through
+# nmcli, and the ISO should be online out of the box for updates and online
+# installs. wpa_supplicant is NetworkManager's default backend for WPA networks.
+ISO_PKGS+=(networkmanager wpa_supplicant)
 for p in "${ISO_PKGS[@]}"; do
     # A second kernel would need a second archiso initramfs; keep the live ISO
     # on one kernel. LTS still ships in the offline repo for target installs.
