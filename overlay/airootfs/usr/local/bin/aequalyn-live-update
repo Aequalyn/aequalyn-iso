@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# aequalyn-live-update -- refresh a running live session from GitHub.
+#
+# Pulls the newest aequalyn, aequalyn-shell, aequalyn-installer, aequalyn-pkgs
+# and aequalyn-themes into /opt/aequalyn (what the installer installs from) and
+# into the live user's home, then restarts the shell. Test a change without
+# building a new ISO: push it, boot the ISO you have, run this.
+#
+#   aequalyn-live-update                 branch main
+#   aequalyn-live-update my-branch       another branch (must exist in every repo,
+#                                        repos without it fall back to main)
+#   AEQUALYN_GIT=https://github.com/you aequalyn-live-update   a fork
+set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+    # keep the desktop's session variables for the shell restart at the end
+    exec sudo WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}" HYPRLAND_INSTANCE_SIGNATURE="${HYPRLAND_INSTANCE_SIGNATURE:-}" \
+        AEQUALYN_GIT="${AEQUALYN_GIT:-}" "$0" "$@"
+fi
+
+B='\033[0;34m'; G='\033[0;32m'; R='\033[0;31m'; N='\033[0m'
+info() { echo -e "${B}::${N} $*"; }
+ok()   { echo -e "${G}ok${N} $*"; }
+die()  { echo -e "${R}error:${N} $*" >&2; exit 1; }
+
+GIT=${AEQUALYN_GIT:-https://github.com/Aequalyn}
+BRANCH=${1:-main}
+DEST=/opt/aequalyn
+LIVE=${SUDO_USER:-live}
+[[ "$LIVE" == root ]] && LIVE=live
+
+curl -fsI --max-time 10 https://github.com >/dev/null || die "no network (check the VM's network adapter)"
+
+T=$(mktemp -d)
+trap 'rm -rf "$T"' EXIT
+
+# fetch <repo>: branch tarball (no git needed on the ISO)
+fetch() {
+    local r=$1 b=$BRANCH
+    if ! curl -fsSL "$GIT/$r/archive/refs/heads/$b.tar.gz" -o "$T/$r.tgz"; then
+        [[ "$b" != main ]] || die "cannot download $r"
+        b=main
+        curl -fsSL "$GIT/$r/archive/refs/heads/main.tar.gz" -o "$T/$r.tgz" || die "cannot download $r"
+    fi
+    mkdir -p "$T/$r"
+    tar -xzf "$T/$r.tgz" -C "$T/$r" --strip-components=1
+    ok "$r ($b)"
+}
+
+info "downloading from $GIT"
+for r in aequalyn aequalyn-shell aequalyn-installer aequalyn-pkgs aequalyn-themes; do fetch "$r"; done
+
+# Same layout as aequalyn-iso-make builds into /opt/aequalyn.
+info "updating $DEST"
+replace() { rm -rf "$2"; cp -a "$1" "$2"; }   # replace <src> <dest>
+for item in bin config assets docs install.sh VERSION README.md; do
+    [[ -e "$T/aequalyn/$item" ]] && replace "$T/aequalyn/$item" "$DEST/$item"
+done
+replace "$T/aequalyn-shell" "$DEST/shell"
+replace "$T/aequalyn-installer" "$DEST/installer"
+mkdir -p "$DEST/packages"
+cp -a "$T/aequalyn-pkgs/lists/." "$DEST/packages/"
+[[ -d "$T/aequalyn-pkgs/aur-cache" ]] && cp -a "$T/aequalyn-pkgs/aur-cache" "$DEST/packages/"
+replace "$T/aequalyn-themes/themes" "$DEST/themes"
+chmod 755 "$DEST/install.sh" "$DEST/bin/"* "$DEST/installer/aequalyn-"* "$DEST/installer/lib/"*.sh 2>/dev/null || true
+ok "installer and desktop sources updated"
+
+if id "$LIVE" >/dev/null 2>&1; then
+    info "updating the desktop of $LIVE"
+    H=$(getent passwd "$LIVE" | cut -d: -f6)
+    bash "$DEST/install.sh" --target "$H" --owner "$(id -u "$LIVE"):$(id -g "$LIVE")" >/dev/null
+    ok "desktop files updated"
+
+    if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+        info "restarting the shell"
+        pkill -u "$LIVE" -f '(^|/)(qs|quickshell)( |$)' 2>/dev/null || true
+        sleep 1
+        sudo -u "$LIVE" env XDG_RUNTIME_DIR="/run/user/$(id -u "$LIVE")" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+            HYPRLAND_INSTANCE_SIGNATURE="${HYPRLAND_INSTANCE_SIGNATURE:-}" PATH="$H/.local/bin:$PATH" \
+            setsid -f qs -n -d >/dev/null 2>&1 || true
+        command -v hyprctl >/dev/null && sudo -u "$LIVE" env XDG_RUNTIME_DIR="/run/user/$(id -u "$LIVE")" \
+            HYPRLAND_INSTANCE_SIGNATURE="${HYPRLAND_INSTANCE_SIGNATURE:-}" hyprctl reload >/dev/null 2>&1 || true
+        ok "shell restarted"
+    else
+        info "not inside the desktop: the new shell starts with the next session"
+    fi
+fi
+
+echo
+ok "done. Install with the new code: sudo aequalyn-install"
