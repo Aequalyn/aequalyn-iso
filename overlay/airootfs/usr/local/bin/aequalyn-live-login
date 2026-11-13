@@ -14,9 +14,29 @@ export PATH="$HOME/.local/bin:$PATH"
 mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
 chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
 
+# Hyprland wants to be started through start-hyprland (0.57+); older builds
+# only have the Hyprland binary.
+launch() {
+    if command -v start-hyprland >/dev/null 2>&1; then dbus-run-session -- start-hyprland
+    else dbus-run-session -- Hyprland; fi
+}
+
 if command -v Hyprland >/dev/null 2>&1; then
     printf '\n\033[38;5;212mWelcome to Aequalyn\033[0m -- starting the desktop...\n'
-    dbus-run-session -- Hyprland
+    started=$SECONDS
+    launch
+    # Gone within seconds: no usable GPU (a VM without 3D acceleration, say).
+    # Try once more with software rendering, which is slow but works everywhere.
+    if (( SECONDS - started < 15 )); then
+        printf '\n\033[1;33mThe desktop did not start with the GPU; trying software rendering...\033[0m\n'
+        started=$SECONDS
+        LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe launch
+        # Some virtual GPUs (VirtualBox VMSVGA) reject atomic modesetting.
+        if (( SECONDS - started < 15 )); then
+            printf '\n\033[1;33mStill no desktop; trying without atomic modesetting...\033[0m\n'
+            AQ_NO_ATOMIC=1 LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe launch
+        fi
+    fi
     printf '\n\033[1;33mHyprland exited.\033[0m\n'
 fi
 
