@@ -82,7 +82,7 @@ mkdir -p "$PROFILE" "$OUT" "$CACHE" "$SKEL" "$OFFLINE"
 
 # ------------------------------------------------------------- mirrors ---
 # The build downloads from Arch mirrors of its own, never the host's mirrorlist
-# (on Omarchy that is Omarchy's own mirror). AQ_MIRRORLIST=<file> overrides.
+# (the host's own mirror). AQ_MIRRORLIST=<file> overrides.
 MIRRORLIST="$WORK/mirrorlist"
 if [[ -n "${AQ_MIRRORLIST:-}" ]]; then
     cp "$AQ_MIRRORLIST" "$MIRRORLIST"
