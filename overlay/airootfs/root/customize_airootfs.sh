@@ -40,4 +40,14 @@ systemctl enable sddm.service 2>/dev/null || true
 # symlink -- nothing is started inside the build chroot.
 systemctl enable NetworkManager.service 2>/dev/null || true
 
+# Guarantee a usable pacman keyring in the live image. archlinux-keyring's
+# install scriptlet normally populates it, but if that step was skipped the
+# online installer dies at pacstrap with "invalid or corrupted package (PGP
+# signature)" for every mirror package. `--init` is idempotent and only mints
+# the local signing key when one is missing.
+pacman-key --init >/dev/null 2>&1 || true
+pacman-key --populate archlinux >/dev/null 2>&1 || true
+# pacman-key starts gpg-agent; do not leave it running inside the image.
+gpgconf --homedir /etc/pacman.d/gnupg --kill all >/dev/null 2>&1 || true
+
 exit 0
