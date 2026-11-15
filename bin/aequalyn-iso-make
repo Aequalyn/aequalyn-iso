@@ -124,10 +124,21 @@ find "$PROJECT" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null |
 ok "source tree: $PROJECT"
 # Rebuild the profile every run: with KEEP_WORK=1 a file dropped from the
 # overlay (or from releng) would otherwise survive in work/profile/airootfs and
-# pacstrap later aborts with a "conflicting files" error.
+# pacstrap later aborts with a "conflicting files" error. The bundled offline
+# repo lives inside the profile, so move it aside before wiping and put it back.
+OFFLINE_KEEP=
+if [[ -d "$OFFLINE" ]]; then
+    OFFLINE_KEEP="$WORK/.offline-keep"
+    rm -rf "$OFFLINE_KEEP"
+    mv "$OFFLINE" "$OFFLINE_KEEP"
+fi
 wipe "$PROFILE"
 mkdir -p "$PROFILE"
 cp -a "$RELENG/." "$PROFILE/"
+if [[ -n "$OFFLINE_KEEP" ]]; then
+    mkdir -p "$(dirname "$OFFLINE")"
+    mv "$OFFLINE_KEEP" "$OFFLINE"
+fi
 
 # Silence the PC-speaker beep in the boot loader menus:
 #   - systemd-boot: "beep on" in loader.conf beeps on every menu entry
