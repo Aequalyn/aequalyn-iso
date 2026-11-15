@@ -22,6 +22,33 @@ session_name() {
 
 cmd=${1:-}
 case "$cmd" in
+    install)
+        [[ ${EUID} -eq 0 ]] || { echo "aequalyn-sddm: install needs root (use pkexec)" >&2; exit 1; }
+        AQ_ROOT=${AEQUALYN_ROOT:-/usr/share/aequalyn}
+        LOCKSCREENS_DIR="$AQ_ROOT/lockscreens"
+        LOCKSCREENS_URL="https://github.com/Aequalyn/aequalyn-lockscreens.git"
+        mkdir -p "$AQ_ROOT"
+        if [[ -d "$LOCKSCREENS_DIR/.git" ]]; then
+            git -C "$LOCKSCREENS_DIR" fetch -q --depth 1 origin main 2>/dev/null || true
+            git -C "$LOCKSCREENS_DIR" reset -q --hard origin/main 2>/dev/null || true
+        else
+            rm -rf "$LOCKSCREENS_DIR"
+            git clone -q --depth 1 "$LOCKSCREENS_URL" "$LOCKSCREENS_DIR" 2>/dev/null || { echo "clone failed" >&2; exit 1; }
+        fi
+        [[ -d "$LOCKSCREENS_DIR" ]] || { echo "no lockscreens dir" >&2; exit 1; }
+        mkdir -p "$THEMES_DIR" /usr/share/fonts/qylock
+        for t in "$LOCKSCREENS_DIR"/*/; do
+            [[ -d "$t" ]] || continue
+            n=$(basename "$t")
+            rm -rf "$THEMES_DIR/$n"
+            cp -r "$t" "$THEMES_DIR/$n"
+        done
+        find "$LOCKSCREENS_DIR" -type f \( -name "*.ttf" -o -name "*.otf" \) -exec cp -n {} /usr/share/fonts/qylock/ \; 2>/dev/null || true
+        fc-cache -f 2>/dev/null || true
+        mkdir -p /usr/share/aequalyn
+        touch /usr/share/aequalyn/lockscreens.enabled
+        echo "installed"
+        ;;
     list)
         for d in "$THEMES_DIR"/*/; do
             [[ -d "$d" ]] || continue
@@ -103,7 +130,7 @@ EOF
         echo "preview done"
         ;;
     *)
-        echo "usage: aequalyn-sddm {list|current|apply <name>|autologin on|off|status|preview <name> [secs]}" >&2
+        echo "usage: aequalyn-sddm {list|current|apply <name>|autologin on|off|status|preview <name> [secs]|install}" >&2
         exit 2
         ;;
 esac
