@@ -29,6 +29,16 @@ fi
 # The live user may install without a password.
 chmod 440 /etc/sudoers.d/live 2>/dev/null || true
 
+# Plymouth boot splash: the theme is staged in the image by the ISO build.
+# Set it as the default and rebuild the initramfs in the same step, because the
+# initramfs built during pacstrap used the package's default theme.
+if [[ -f /usr/share/plymouth/themes/aequalyn/aequalyn.plymouth ]]; then
+    echo "Plymouth: setting aequalyn theme and rebuilding the initramfs"
+    plymouth-set-default-theme aequalyn -R
+else
+    echo "WARNING: /usr/share/plymouth/themes/aequalyn is missing; no boot splash" >&2
+fi
+
 # SDDM owns the boot login: it autologins `live` into the guarded Hyprland
 # session. This runs in the archiso chroot, so `systemctl enable` just writes
 # the display-manager.service alias (no daemon is started here).

@@ -108,7 +108,7 @@ repo_dir() { # repo_dir <name> -> checkout path (sibling or fresh clone)
 info "assembling the source tree from $SOURCES"
 rm -rf "$PROJECT"; mkdir -p "$PROJECT/packages"
 CORE=$(repo_dir aequalyn)
-for item in bin config assets docs install.sh VERSION README.md SKILL.md; do
+for item in bin config assets docs plymouth install.sh VERSION README.md SKILL.md; do
     [[ -e "$CORE/$item" ]] && cp -a "$CORE/$item" "$PROJECT/"
 done
 mkdir -p "$PROJECT/shell"; cp -a "$(repo_dir aequalyn-shell)/." "$PROJECT/shell/"
@@ -139,6 +139,43 @@ for g in "$PROFILE/grub/grub.cfg" "$PROFILE/grub/loopback.cfg"; do
     [[ -f "$g" ]] || continue
     sed -i '/^[[:space:]]*#[[:space:]]*GRUB init tune for accessibility[[:space:]]*$/d; /^[[:space:]]*play[[:space:]]/d' "$g"
 done
+
+# ---------------------------------------------------------------- plymouth ---
+# Boot splash. The theme lives in the core repo's plymouth/ directory. Live
+# media never unlocks a LUKS volume, so there is no passphrase answer to start
+# the bar from: switch the theme to live mode (bar runs with the splash) and
+# use a duration closer to the ISO's own boot than an installed system's.
+THEME_SRC="$PROJECT/plymouth/aequalyn"
+THEME_DST="$PROFILE/airootfs/usr/share/plymouth/themes/aequalyn"
+if [[ -d "$THEME_SRC" ]]; then
+    install -d -m 0755 "$THEME_DST"
+    cp -a "$THEME_SRC/." "$THEME_DST/"
+    sed -i -e 's/^START_BAR_ON_SPLASH = 0;/START_BAR_ON_SPLASH = 1;/' \
+             -e 's/^BOOT_SECONDS = .*/BOOT_SECONDS = 12.0;/' "$THEME_DST/aequalyn.script"
+    ok "Plymouth theme staged for the live ISO (bar from splash, 12 s)"
+else
+    warn "no plymouth/aequalyn theme in the core checkout; the ISO will boot without a splash"
+fi
+
+# The splash must be in the initramfs, which archiso builds from the profile's
+# mkinitcpio hooks. Start plymouth right after udev, before archiso mounts the
+# image, so the archiso console output never appears.
+MKI_CONF="$PROFILE/airootfs/etc/mkinitcpio.conf.d/archiso.conf"
+if [[ -f "$MKI_CONF" ]] && ! grep -q 'plymouth' "$MKI_CONF"; then
+    sed -i 's/^\(HOOKS=(base udev\) /\1 plymouth /' "$MKI_CONF"
+    grep -q '^HOOKS=(base udev plymouth' "$MKI_CONF" \
+        || warn "could not add the plymouth hook to $MKI_CONF"
+fi
+
+# quiet + splash for every boot entry: mkarchiso substitutes %KERNEL_PARAMS%
+# from kernel_params_<arch> in profiledef.sh (syslinux, grub and systemd-boot).
+if ! grep -q '^kernel_params_x86_64=' "$PROFILE/profiledef.sh"; then
+    if grep -q '^kernel_params_aarch64=' "$PROFILE/profiledef.sh"; then
+        sed -i '/^kernel_params_aarch64=/i kernel_params_x86_64="quiet splash"' "$PROFILE/profiledef.sh"
+    else
+        printf 'kernel_params_x86_64="quiet splash"\n' >> "$PROFILE/profiledef.sh"
+    fi
+fi
 
 # ---------------------------------------------------------------- overlay ----
 info "overlaying Aequalyn airootfs files"
@@ -176,7 +213,7 @@ chown -R 0:0 "$SKEL"
 # keeps git metadata and build leftovers out of the image.
 info "copying Aequalyn source into /opt/aequalyn"
 mkdir -p "$PROFILE/airootfs/opt/aequalyn"
-for item in shell config bin assets packages installer themes docs install.sh VERSION README.md; do
+for item in shell config bin assets packages installer themes plymouth docs install.sh VERSION README.md; do
     [[ -e "$PROJECT/$item" ]] && cp -a "$PROJECT/$item" "$PROFILE/airootfs/opt/aequalyn/"
 done
 chmod 755 "$PROFILE/airootfs/usr/local/bin/"* "$PROFILE/airootfs/opt/aequalyn/install.sh" \
@@ -195,7 +232,8 @@ ISO_PKGS+=($(read_list "$PROJECT/packages/offline-extra.packages"))
 # getty autologin; it pulls in xorg-server itself for its greeter, so there is
 # no need to list xorg explicitly.
 ISO_PKGS+=(sddm arch-install-scripts limine efibootmgr parted gptfdisk openssl \
-           git gum dialog jq python dbus snapper snap-pac zram-generator mkinitcpio)
+           git gum dialog jq python dbus snapper snap-pac zram-generator mkinitcpio \
+           plymouth)
 # Networking for the live session: the shell bar reads the link state through
 # nmcli, and the ISO should be online out of the box for updates and online
 # installs. wpa_supplicant is NetworkManager's default backend for WPA networks.
@@ -228,6 +266,8 @@ OFFLINE_PKGS+=($(read_list "$PROJECT/packages/base.packages"))
 OFFLINE_PKGS+=($(read_list "$PROJECT/packages/desktop.packages"))
 OFFLINE_PKGS+=($(read_list "$PROJECT/packages/profiles/minimal.packages"))
 OFFLINE_PKGS+=($(read_list "$PROJECT/packages/offline-extra.packages"))
+# The boot splash the installer applies; keep it available for offline installs.
+OFFLINE_PKGS+=(plymouth)
 mapfile -t OFFLINE_PKGS < <(printf '%s\n' "${OFFLINE_PKGS[@]}" | sort -u)
 ok "offline repo: ${#OFFLINE_PKGS[@]} packages (+ dependencies)"
 
