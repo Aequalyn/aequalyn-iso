@@ -119,6 +119,8 @@ cp -a "$PKGS/lists/." "$PROJECT/packages/"
 THEMES=$(repo_dir aequalyn-themes)
 mkdir -p "$PROJECT/themes"; cp -a "$THEMES/themes/." "$PROJECT/themes/"
 find "$PROJECT" -name .git -prune -exec rm -rf {} +
+# Drop Python bytecode caches that can sneak in from running the helpers.
+find "$PROJECT" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
 ok "source tree: $PROJECT"
 cp -a "$RELENG/." "$PROFILE/"
 
@@ -141,6 +143,11 @@ done
 # ---------------------------------------------------------------- overlay ----
 info "overlaying Aequalyn airootfs files"
 cp -a "$SCRIPT_DIR/overlay/airootfs/." "$PROFILE/airootfs/"
+# Ship aequalyn-provision-user in /usr/local/bin too (it lives in the core bin/).
+if [[ -f "$PROJECT/bin/aequalyn-provision-user" ]]; then
+    cp "$PROJECT/bin/aequalyn-provision-user" "$PROFILE/airootfs/usr/local/bin/"
+    chmod 755 "$PROFILE/airootfs/usr/local/bin/aequalyn-provision-user"
+fi
 
 # /etc/skel -> /home/live/.config (mkarchiso copies skel for UID >= 1000 users)
 info "populating /etc/skel with the Aequalyn desktop"
@@ -299,6 +306,7 @@ extra = '''  ["/usr/local/bin/aequalyn-live-session"]="0:0:755"
   ["/usr/local/bin/aequalyn-detect"]="0:0:755"
   ["/usr/local/bin/aequalyn-repair"]="0:0:755"
   ["/usr/local/bin/aequalyn-live-update"]="0:0:755"
+  ["/usr/local/bin/aequalyn-provision-user"]="0:0:755"
   ["/etc/sddm.conf.d/autologin.conf"]="0:0:644"
   ["/usr/share/wayland-sessions/aequalyn.desktop"]="0:0:644"
   ["/usr/share/applications/aequalyn-install.desktop"]="0:0:644"
