@@ -54,7 +54,7 @@ Rectangle {
   }
 
   QtObject {
-    id: textFont; property string name: config.displayFont
+    property string name: config.displayFont
   }
 
   Repeater {
