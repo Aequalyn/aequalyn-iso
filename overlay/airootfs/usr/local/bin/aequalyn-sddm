@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# aequalyn-sddm -- manage the SDDM login screen theme, autologin and preview.
+#
+#   aequalyn-sddm list                       print installed SDDM theme names
+#   aequalyn-sddm current                    print the current theme name (or empty)
+#   aequalyn-sddm apply <name>               set SDDM's theme (root)
+#   aequalyn-sddm autologin on|off           enable/disable auto-login into Hyprland (root)
+#   aequalyn-sddm autologin status           "on" or "off"
+#   aequalyn-sddm preview <name> [seconds]   run the greeter in a window (no root)
+set -euo pipefail
+
+THEMES_DIR=/usr/share/sddm/themes
+SDDM_CONF_DIR=/etc/sddm.conf.d
+THEME_CONF="$SDDM_CONF_DIR/aequalyn-theme.conf"
+AUTOLOGIN_CONF="$SDDM_CONF_DIR/aequalyn-autologin.conf"
+
+session_name() {
+    if [[ -f /usr/share/wayland-sessions/aequalyn.desktop ]]; then echo aequalyn
+    elif [[ -f /usr/share/wayland-sessions/hyprland.desktop ]]; then echo hyprland
+    else echo hyprland; fi
+}
+
+cmd=${1:-}
+case "$cmd" in
+    list)
+        for d in "$THEMES_DIR"/*/; do
+            [[ -d "$d" ]] || continue
+            b=$(basename "$d")
+            [[ -f "$d/metadata.desktop" || -f "$d/Main.qml" ]] || continue
+            # skip SDDM's built-in default themes
+            case "$b" in elarun|maldives|maya) continue ;; esac
+            echo "$b"
+        done | sort
+        ;;
+    current)
+        if [[ -f "$THEME_CONF" ]]; then
+            awk -F= '/^[[:space:]]*Current[[:space:]]*=/{gsub(/[[:space:]]/,"",$2); print $2}' "$THEME_CONF" | tail -1
+        fi
+        ;;
+    apply)
+        [[ ${EUID} -eq 0 ]] || { echo "aequalyn-sddm: apply needs root (use pkexec)" >&2; exit 1; }
+        name=${2:?theme name required}
+        [[ -d "$THEMES_DIR/$name" ]] || { echo "aequalyn-sddm: unknown theme: $name" >&2; exit 1; }
+        mkdir -p "$SDDM_CONF_DIR"
+        cat > "$THEME_CONF" <<EOF
+[Theme]
+Current=$name
+EOF
+        echo "applied: $name"
+        ;;
+    autologin)
+        sub=${2:-status}
+        case "$sub" in
+            status)
+                if [[ -f "$AUTOLOGIN_CONF" ]] && grep -q '^User=' "$AUTOLOGIN_CONF" 2>/dev/null; then
+                    u=$(awk -F= '/^User=/{print $2}' "$AUTOLOGIN_CONF" | tail -1)
+                    [[ -n "$u" && "$u" != "__USERNAME__" ]] && echo on || echo off
+                else
+                    echo off
+                fi
+                ;;
+            on)
+                [[ ${EUID} -eq 0 ]] || { echo "aequalyn-sddm: needs root" >&2; exit 1; }
+                user=${3:-${SUDO_USER:-$USER}}
+                [[ -z "$user" || "$user" == "root" ]] && user=$(awk -F: '$3==1000{print $1; exit}' /etc/passwd)
+                mkdir -p "$SDDM_CONF_DIR"
+                cat > "$AUTOLOGIN_CONF" <<EOF
+[Autologin]
+User=$user
+Session=$(session_name)
+Relogin=false
+EOF
+                echo "autologin on: $user"
+                ;;
+            off)
+                [[ ${EUID} -eq 0 ]] || { echo "aequalyn-sddm: needs root" >&2; exit 1; }
+                rm -f "$AUTOLOGIN_CONF"
+                echo "autologin off"
+                ;;
+            *) echo "usage: aequalyn-sddm autologin {on|off|status} [user]" >&2; exit 2 ;;
+        esac
+        ;;
+    preview)
+        name=${2:?theme name required}
+        secs=${3:-10}
+        [[ -d "$THEMES_DIR/$name" ]] || { echo "aequalyn-sddm: unknown theme: $name" >&2; exit 1; }
+        if ! command -v sddm-greeter-qt6 >/dev/null 2>&1; then
+            echo "aequalyn-sddm: sddm-greeter-qt6 not found" >&2; exit 1
+        fi
+        # hide the Settings panel so the preview is visible (greeter is fullscreen
+        # on both outputs in test mode, but sits below layer-shell surfaces)
+        qs ipc call aequalyn closeSettings >/dev/null 2>&1 || true
+        sleep 0.3
+        sddm-greeter-qt6 --test-mode --theme "$THEMES_DIR/$name" &
+        greeter_pid=$!
+        sleep "$secs"
+        kill "$greeter_pid" 2>/dev/null || true
+        kill -9 "$greeter_pid" 2>/dev/null || true
+        wait "$greeter_pid" 2>/dev/null || true
+        # bring Settings back
+        qs ipc call aequalyn openSettings >/dev/null 2>&1 || true
+        wait "$greeter_pid" 2>/dev/null || true
+        echo "preview done"
+        ;;
+    *)
+        echo "usage: aequalyn-sddm {list|current|apply <name>|autologin on|off|status|preview <name> [secs]}" >&2
+        exit 2
+        ;;
+esac
