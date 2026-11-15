@@ -114,7 +114,7 @@ main() {
             done
             find "$LOCKSCREENS_DIR" -type f \( -name "*.ttf" -o -name "*.otf" \) -exec $SUDO cp -n {} /usr/share/fonts/qylock/ \; 2>/dev/null || true
             $SUDO fc-cache -f 2>/dev/null || true
-            $SUDO touch /usr/share/aequalyn/lockscreens.enabled
+            printf '1\n' | $SUDO tee /usr/share/aequalyn/lockscreens.enabled >/dev/null
         fi
     fi
 
