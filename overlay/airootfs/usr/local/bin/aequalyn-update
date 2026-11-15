@@ -38,6 +38,7 @@ main() {
     AEQUALYN_GIT=${AEQUALYN_GIT:-https://github.com/Aequalyn}
     SYSTEM_URL="$AEQUALYN_GIT/aequalyn.git"
     SHELL_URL="$AEQUALYN_GIT/aequalyn-shell.git"
+    LOCKSCREENS_URL="$AEQUALYN_GIT/aequalyn-lockscreens.git"
 
     [[ -d "$AQ_ROOT" ]] || { echo "aequalyn-update: $AQ_ROOT not found" >&2; exit 1; }
 
@@ -85,6 +86,35 @@ main() {
             step="putting the shell in place"
             $SUDO rm -rf "$SHELL_DIR"
             $SUDO mv "$SHELL_DIR.new" "$SHELL_DIR"
+        fi
+    fi
+
+    # Optional SDDM lock-screen themes: only sync if the user opted in (marker present).
+    if [[ -f /usr/share/aequalyn/lockscreens.enabled ]]; then
+        step="getting the newest lock screens"
+        LOCKSCREENS_DIR="$AQ_ROOT/lockscreens"
+        if [[ $DO_PULL -eq 1 ]]; then
+            if [[ -d "$LOCKSCREENS_DIR/.git" ]]; then
+                sync_clone "$LOCKSCREENS_DIR" "$LOCKSCREENS_URL" "lock screens"
+            else
+                $SUDO rm -rf "$LOCKSCREENS_DIR.new"
+                $SUDO git clone -q --depth 1 "$LOCKSCREENS_URL" "$LOCKSCREENS_DIR.new"
+                $SUDO rm -rf "$LOCKSCREENS_DIR"
+                $SUDO mv "$LOCKSCREENS_DIR.new" "$LOCKSCREENS_DIR"
+            fi
+        fi
+        if [[ -d "$LOCKSCREENS_DIR" ]]; then
+            step="applying lock screens"
+            $SUDO mkdir -p /usr/share/sddm/themes /usr/share/fonts/qylock
+            for t in "$LOCKSCREENS_DIR"/*/; do
+                [[ -d "$t" ]] || continue
+                name=$(basename "$t")
+                $SUDO rm -rf "/usr/share/sddm/themes/$name"
+                $SUDO cp -r "$t" "/usr/share/sddm/themes/$name"
+            done
+            find "$LOCKSCREENS_DIR" -type f \( -name "*.ttf" -o -name "*.otf" \) -exec $SUDO cp -n {} /usr/share/fonts/qylock/ \; 2>/dev/null || true
+            $SUDO fc-cache -f 2>/dev/null || true
+            $SUDO touch /usr/share/aequalyn/lockscreens.enabled
         fi
     fi
 
