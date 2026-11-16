@@ -28,6 +28,18 @@ session, which starts a single guarded Hyprland + QuickShell desktop. A root
 rescue shell stays on tty2 (`Ctrl+Alt+F2`). Run `sudo aequalyn-install`
 (or `Super + I`) to install.
 
+## Live session defaults
+
+- The `live` user's password is **`live`**. Autologin means you normally never
+  type it to reach the desktop, but it is needed to unlock the screen
+  (hyprlock) or log in manually. `sudo` stays passwordless for `live` since the
+  medium is ephemeral.
+- The display scale is fixed at **1** — no HiDPI auto-detection. The live
+  session's Hyprland config uses `scale = 1` instead of `scale = "auto"`;
+  because that setting comes from the core `aequalyn` config, newly installed
+  systems default to scale 1 as well. On the live image `monitors.lua` is empty,
+  so nothing overrides it.
+
 ## Credits
 
 [nightdevil00](https://github.com/nightdevil00) contributed to the code here.
