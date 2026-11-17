@@ -21,9 +21,9 @@ fi
 chmod 755 /opt/aequalyn/install.sh /usr/local/bin/aequalyn-* 2>/dev/null || true
 
 # Universal clipboard: wl-paste --watch runs this capture helper.
-chmod 755 /etc/skel/.config/quickshell/clipboard/capture.sh 2>/dev/null || true
-if [[ -d /home/live/.config/quickshell/clipboard ]]; then
-    chmod 755 /home/live/.config/quickshell/clipboard/capture.sh 2>/dev/null || true
+chmod 755 /etc/skel/.config/quickshell/plugins/clipboard/capture.sh 2>/dev/null || true
+if [[ -d /home/live/.config/quickshell/plugins/clipboard ]]; then
+    chmod 755 /home/live/.config/quickshell/plugins/clipboard/capture.sh 2>/dev/null || true
 fi
 
 # The live user may install without a password.
