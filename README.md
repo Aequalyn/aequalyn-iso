@@ -34,6 +34,10 @@ rescue shell stays on tty2 (`Ctrl+Alt+F2`). Run `sudo aequalyn-install`
   type it to reach the desktop, but it is needed to unlock the screen
   (hyprlock) or log in manually. `sudo` stays passwordless for `live` since the
   medium is ephemeral.
+- **root** has the same password, **`live`** (set in `overlay/airootfs/etc/shadow`),
+  so the tty2 root rescue shell and any `su -` from the live session work
+  without a puzzle. Nothing in the installed system keeps this: the target's
+  root password is whatever the installer's password field sets.
 - The display scale is fixed at **1** — no HiDPI auto-detection. The live
   session's Hyprland config uses `scale = 1` instead of `scale = "auto"`;
   because that setting comes from the core `aequalyn` config, newly installed
