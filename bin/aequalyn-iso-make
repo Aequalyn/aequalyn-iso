@@ -108,7 +108,7 @@ repo_dir() { # repo_dir <name> -> checkout path (sibling or fresh clone)
 info "assembling the source tree from $SOURCES"
 rm -rf "$PROJECT"; mkdir -p "$PROJECT/packages"
 CORE=$(repo_dir aequalyn)
-for item in bin config assets docs plymouth install.sh VERSION README.md SKILL.md; do
+for item in bin config assets docs plymouth migrations install.sh VERSION README.md SKILL.md; do
     [[ -e "$CORE/$item" ]] && cp -a "$CORE/$item" "$PROJECT/"
 done
 mkdir -p "$PROJECT/shell"; cp -a "$(repo_dir aequalyn-shell)/." "$PROJECT/shell/"
@@ -121,6 +121,11 @@ mkdir -p "$PROJECT/themes"; cp -a "$THEMES/themes/." "$PROJECT/themes/"
 find "$PROJECT" -name .git -prune -exec rm -rf {} +
 # Drop Python bytecode caches that can sneak in from running the helpers.
 find "$PROJECT" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
+# Drop the lock-screen configs aequalyn generates from the running wallpaper
+# (config/hypr/lockscreens/.classic, .wallpaper, ...): they are per-machine
+# state, written into the checkout by the lock-screen tools, and must not
+# ship as if they were the templates next to them.
+find "$PROJECT/config/hypr/lockscreens" -maxdepth 1 -type f -name '.*' -delete 2>/dev/null || true
 ok "source tree: $PROJECT"
 # Rebuild the profile every run: with KEEP_WORK=1 a file dropped from the
 # overlay (or from releng) would otherwise survive in work/profile/airootfs and
@@ -229,7 +234,7 @@ chown -R 0:0 "$SKEL"
 # keeps git metadata and build leftovers out of the image.
 info "copying Aequalyn source into /opt/aequalyn"
 mkdir -p "$PROFILE/airootfs/opt/aequalyn"
-for item in shell config bin assets packages installer themes plymouth docs install.sh VERSION README.md; do
+for item in shell config bin assets packages installer themes plymouth migrations docs install.sh VERSION README.md; do
     [[ -e "$PROJECT/$item" ]] && cp -a "$PROJECT/$item" "$PROFILE/airootfs/opt/aequalyn/"
 done
 chmod 755 "$PROFILE/airootfs/usr/local/bin/"* "$PROFILE/airootfs/opt/aequalyn/install.sh" \

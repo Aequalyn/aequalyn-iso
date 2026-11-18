@@ -26,6 +26,16 @@ if [[ -d /home/live/.config/quickshell/plugins/clipboard ]]; then
     chmod 755 /home/live/.config/quickshell/plugins/clipboard/capture.sh 2>/dev/null || true
 fi
 
+# The plugins' own command helpers. Most are called through `bash` or
+# `python3`, but the FM's launcher is exec'd directly (its desktop entry and
+# the D-Bus service file), so keep every plugin bin runnable.
+for d in /etc/skel/.config/quickshell/plugins/*/bin; do
+    [[ -d $d ]] && chmod 755 "$d"/* 2>/dev/null || true
+done
+for d in /home/live/.config/quickshell/plugins/*/bin; do
+    [[ -d $d ]] && chmod 755 "$d"/* 2>/dev/null || true
+done
+
 # The live user may install without a password.
 chmod 440 /etc/sudoers.d/live 2>/dev/null || true
 
