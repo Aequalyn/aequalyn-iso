@@ -405,6 +405,27 @@ s = s.replace('Include = /etc/pacman.d/mirrorlist', 'Include = ' + sys.argv[2])
 p.write_text(s)
 PY
 
+# ------------------------------------------------- Aequalyn's own packages ---
+# Packages built for Aequalyn and kept prebuilt in aequalyn-pkgs/aur-cache
+# (local.packages: mpvpaper, ddwriter, nudu) are not in the Arch repositories:
+# the live system installs them from a local repository made here. Installs get
+# them from the offline repository below, which takes the whole cache.
+LOCAL_REPO="$WORK/local-repo"
+mapfile -t LOCAL_PKGS < <(read_list "$PROJECT/packages/local.packages")
+if (( ${#LOCAL_PKGS[@]} )); then
+    info "adding Aequalyn's own packages to the live system: ${LOCAL_PKGS[*]}"
+    rm -rf "$LOCAL_REPO"; mkdir -p "$LOCAL_REPO"
+    for p in "${LOCAL_PKGS[@]}"; do
+        f=$(compgen -G "$PROJECT/packages/aur-cache/$p-[0-9]*.pkg.tar.zst" | sort -V | tail -n1 || true)
+        [[ -n "$f" ]] || abort "$p (local.packages) is not built in aequalyn-pkgs/aur-cache"
+        cp "$f" "$LOCAL_REPO/"
+        grep -qx -- "$p" "$PROFILE/packages.x86_64" || echo "$p" >> "$PROFILE/packages.x86_64"
+    done
+    ( cd "$LOCAL_REPO" && repo-add -q aequalyn-local.db.tar.gz ./*.pkg.tar.zst )
+    printf '\n[aequalyn-local]\nSigLevel = Never\nServer = file://%s\n' "$LOCAL_REPO" >> "$PROFILE/pacman.conf"
+    ok "local repository: $(find "$LOCAL_REPO" -name '*.pkg.tar.zst' | wc -l) packages"
+fi
+
 # ------------------------------------------------------- offline repository ---
 OFFLINE_PKGS=()
 OFFLINE_PKGS+=($(read_list "$PROJECT/packages/base.packages"))

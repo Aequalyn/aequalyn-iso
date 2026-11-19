@@ -28,6 +28,15 @@ session, which starts a single guarded Hyprland + QuickShell desktop. A root
 rescue shell stays on tty2 (`Ctrl+Alt+F2`). Run `sudo aequalyn-install`
 (or `Super + I`) to install.
 
+The boot menu (UEFI and BIOS) has an **Aequalyn live, safe graphics** entry under
+the default one: it keeps the discrete GPU's drivers (nouveau, nvidia) from
+loading, so the integrated GPU drives the screen. Use it on laptops with hybrid
+graphics, or when a graphics card does not start the desktop.
+
+Packages not in the Arch repositories (aequalyn-pkgs `local.packages`: mpvpaper,
+DDWriter, nudu) are installed on the live system from a local repository made
+from aequalyn-pkgs `aur-cache/`.
+
 ## Live session defaults
 
 - The `live` user's password is **`live`**. Autologin means you normally never
