@@ -21,6 +21,8 @@ package repository and writes the ISO to `release/`.
 | `KEEP_WORK=1` | Keep `work/` between builds |
 | `SKIP_DOWNLOAD=1` | Reuse the offline repository from the previous build |
 | `AEQUALYN_GIT` | Clone base URL (default `https://github.com/Aequalyn`) |
+| `AQ_WORK=<dir>` | Build on another disk: the work tree goes in `<dir>/aequalyn-iso-work` (the ISO still lands in `release/`) |
+| `AQ_MIN_FREE_GB` | Free space the build checks for before starting (default 32: about 30 GB at its peak) |
 | `AQ_MIRRORLIST` | A mirrorlist file to download from (default: a few Arch mirrors; the host's own mirrorlist is never used) |
 
 SDDM owns the boot login: it autologs `live` into the `aequalyn` Wayland
