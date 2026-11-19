@@ -116,8 +116,15 @@ mkdir -p "$PROJECT/installer"; cp -a "$(repo_dir aequalyn-installer)/." "$PROJEC
 PKGS=$(repo_dir aequalyn-pkgs)
 cp -a "$PKGS/lists/." "$PROJECT/packages/"
 [[ -d "$PKGS/aur-cache" ]] && cp -a "$PKGS/aur-cache" "$PROJECT/packages/"
+# The ISO ships Aequalyn's own theme bundles only (night and day); the rest of
+# the catalogue installs later from the control center or aequalyn-themes.
+ISO_THEMES=(aequalyn aequalyn-day)
 THEMES=$(repo_dir aequalyn-themes)
-mkdir -p "$PROJECT/themes"; cp -a "$THEMES/themes/." "$PROJECT/themes/"
+mkdir -p "$PROJECT/themes"
+for t in "${ISO_THEMES[@]}"; do
+    [[ -f "$THEMES/themes/$t/theme.json" ]] || abort "theme bundle missing: $THEMES/themes/$t"
+    cp -a "$THEMES/themes/$t" "$PROJECT/themes/"
+done
 find "$PROJECT" -name .git -prune -exec rm -rf {} +
 # Drop Python bytecode caches that can sneak in from running the helpers.
 find "$PROJECT" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
@@ -207,9 +214,67 @@ if [[ -f "$PROJECT/bin/aequalyn-provision-user" ]]; then
     chmod 755 "$PROFILE/airootfs/usr/local/bin/aequalyn-provision-user"
 fi
 
+# The desktop the ISO starts with, for the live session and for installs made
+# from it (both take config/aequalyn/settings.json from this tree): the Islands
+# ensemble, three soft islands for the bar and docks that wear the same look
+# (docks follow the bar unless told otherwise), a short list of bar widgets,
+# and the theme's own wallpapers as the rotation. Every part stays changeable
+# in the control center.
+info "setting the ISO's desktop defaults (Islands bar and docks)"
+python3 - "$PROJECT/config/aequalyn/settings.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+# BarLooks.applyLook(<core default>, "archipelago"), as the Islands ensemble stores it
+d["barStyle"] = {
+    "enabled": True, "chips": True, "shape": "islands", "ends": "rounded", "radius": 12,
+    "pointing": "right", "pointingBar": "right", "flatSide": "none",
+    "surface": "filled", "fill": "solid", "gradientTo": "accent", "gradientAcross": False,
+    "pattern": "none", "depth": "flat", "lines": "solid", "border": "subtle", "borderWidth": 1,
+    "railSide": "windows", "outlineGradient": True, "outlineGradientTo": "spectrum",
+    "ornaments": "none", "shadow": "soft", "shadowColor": "dark",
+    "attach": False, "concave": True, "regions": "all",
+    "edgeGap": 6, "floatGap": 0, "sideGap": 10, "padding": 8, "pillRoom": 0, "pillGap": 2,
+    "mergeGap": 4, "fullExtra": 0, "fullInset": 8, "slim": 0, "pillFit": False,
+    "centerMin": 0, "mirrorSides": False, "hover": "fill", "hoverColor": "text",
+    "separators": "none", "dividers": False, "edgeLine": False, "colorMode": "theme",
+    "centerStyle": "same", "opacity": 100,
+    "customBg": "#141414", "customFg": "#e0e0e0", "accentColor": "#ff6a1f",
+}
+# The shell keeps every widget in the arranger (it appends any missing one), so the
+# short bar comes from the widgets' show switches; the hidden ones wait at the end.
+a = d.setdefault("appearance", {})
+hidden = {"layouts": "showLayouts", "atelier": "showAtelier", "title": "showTitle",
+          "brightness": "showBrightness", "cpu": "showCpu", "temperature": "showTemperature",
+          "caffeine": "showCaffeine", "screenrecorder": "showScreenRecorder",
+          "screenshot": "showScreenshot", "clipscape": "showClipscape"}
+for key in hidden.values():
+    a[key] = False
+a["barLeft"] = ["appsmenu", "workspaces"]
+a["barCenter"] = ["clock", "media"]
+a["barRight"] = ["network", "bluetooth", "volume", "battery", "tray",
+                 "plume", "altscape", "settingsbutton", "power"] + list(hidden)
+d.setdefault("wallpaper", {})["mode"] = "theme"
+open(p, "w").write(json.dumps(d, indent=2) + "\n")
+PY
+
 # /etc/skel -> /home/live/.config (mkarchiso copies skel for UID >= 1000 users)
 info "populating /etc/skel with the Aequalyn desktop"
 "$PROJECT/install.sh" --target "$SKEL" --skel
+
+# The live session's themes: /usr/share/aequalyn/themes is where aequalyn-themes
+# looks first, so point it at the copy the installer ships in /opt/aequalyn
+# (one copy in the image). The live user starts on Aequalyn with its night
+# wallpaper; the path is a system one, so it holds before the home exists.
+mkdir -p "$PROFILE/airootfs/usr/share/aequalyn"
+ln -sfn /opt/aequalyn/themes "$PROFILE/airootfs/usr/share/aequalyn/themes"
+printf 'theme:aequalyn' > "$SKEL/.config/quickshell/theme.conf"
+printf '%s' /usr/share/aequalyn/themes/aequalyn/backgrounds/1-night-aequalyn.jpg \
+    > "$SKEL/.config/quickshell/wallpaper.conf"
+mkdir -p "$SKEL/.config/aequalyn/current"
+ln -sfn /usr/share/aequalyn/themes/aequalyn "$SKEL/.config/aequalyn/current/theme"
+[[ -f "$PROJECT/themes/aequalyn/backgrounds/1-night-aequalyn.jpg" ]] \
+    || abort "the Aequalyn night wallpaper is missing from the theme bundle"
 
 # The core settings.json pins a generic dock list (firefox/nautilus). On the live
 # ISO pin the apps that are actually installed, plus the "Install Aequalyn"
