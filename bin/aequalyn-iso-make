@@ -168,6 +168,65 @@ for g in "$PROFILE/grub/grub.cfg" "$PROFILE/grub/loopback.cfg"; do
     sed -i '/^[[:space:]]*#[[:space:]]*GRUB init tune for accessibility[[:space:]]*$/d; /^[[:space:]]*play[[:space:]]/d' "$g"
 done
 
+# ------------------------------------------------------------- boot menus ---
+# The entries say Aequalyn, and each menu (systemd-boot, GRUB, syslinux) gets a
+# safe graphics entry right under the default one: the discrete GPU's drivers
+# are kept from loading, so the integrated GPU drives the screen (laptops with
+# hybrid graphics, or a desktop card that will not start the desktop).
+SAFE_GFX="module_blacklist=nouveau,nvidia,nvidia_drm,nvidia_modeset,nvidia_uvm"
+info "naming the boot entries and adding a safe graphics entry"
+python3 - "$PROFILE" "$SAFE_GFX" <<'PY'
+import pathlib, re, sys
+prof, safe = pathlib.Path(sys.argv[1]), sys.argv[2]
+NAME, SAFE = "Aequalyn live", "Aequalyn live, safe graphics"
+
+def rename(s):
+    return s.replace("Arch Linux install medium", NAME)
+
+# systemd-boot: one file per entry; sorted by sort-key, so 01s lands after 01
+entries = prof / "efiboot/loader/entries"
+for f in entries.glob("*.conf"):
+    f.write_text(rename(f.read_text()))
+main = entries / "01-archiso-linux.conf"
+if main.exists():
+    s = main.read_text()
+    s = s.replace("title    " + NAME + " (", "title    " + SAFE + " (", 1)
+    s = re.sub(r"^sort-key .*$", "sort-key 01s", s, count=1, flags=re.M)
+    s = re.sub(r"^(options .*)$", r"\1 " + safe, s, count=1, flags=re.M)
+    (entries / "01s-archiso-linux-safe-graphics.conf").write_text(s)
+
+# GRUB (grub.cfg for the ISO, loopback.cfg for booting the ISO file from a disk)
+for name in ("grub/grub.cfg", "grub/loopback.cfg"):
+    f = prof / name
+    if not f.exists():
+        continue
+    s = rename(f.read_text())
+    m = re.search(r"^menuentry \"" + re.escape(NAME) + r" \(.*?--id 'archlinux' \{\n.*?^\}\n", s, re.S | re.M)
+    if m:
+        e = m.group(0).replace('"' + NAME + " (", '"' + SAFE + " (", 1)
+        e = e.replace("--id 'archlinux'", "--id 'archlinux-safe-graphics'", 1)
+        e = re.sub(r"^(\s*linux .*)$", r"\1 " + safe, e, count=1, flags=re.M)
+        s = s[:m.end()] + "\n" + e + s[m.end():]
+    f.write_text(s)
+
+# syslinux (BIOS)
+for f in (prof / "syslinux").glob("*.cfg"):
+    s = rename(f.read_text()).replace("MENU TITLE Arch Linux", "MENU TITLE Aequalyn")
+    if f.name == "archiso_sys-linux.cfg":
+        s = s.replace("Arch Linux", "Aequalyn")
+        s += ("\n# Integrated GPU only\nLABEL aequalynsafe\nTEXT HELP\n"
+              "Boot Aequalyn live with the discrete GPU's drivers kept from loading,\n"
+              "so the integrated GPU drives the screen.\nENDTEXT\n"
+              "MENU LABEL " + SAFE + " (%ARCH%, BIOS)\n"
+              "LINUX /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux\n"
+              "INITRD /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img\n"
+              "APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% %KERNEL_PARAMS% " + safe + "\n")
+    f.write_text(s)
+PY
+grep -q 'archlinux-safe-graphics' "$PROFILE/grub/grub.cfg" \
+    && [[ -f "$PROFILE/efiboot/loader/entries/01s-archiso-linux-safe-graphics.conf" ]] \
+    || warn "the safe graphics entry could not be added to every boot menu"
+
 # ---------------------------------------------------------------- plymouth ---
 # Boot splash. The theme lives in the core repo's plymouth/ directory. Live
 # media never unlocks a LUKS volume, so there is no passphrase answer to start
