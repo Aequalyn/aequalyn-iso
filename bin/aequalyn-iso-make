@@ -47,7 +47,10 @@ while [[ $# -gt 0 ]]; do
         *) abort "unknown option: $1" ;;
     esac
 done
-WORK="$ISO_REPO/work"
+# AQ_WORK=<dir> builds on another disk: the work tree goes in <dir>/aequalyn-iso-work
+# (its own folder, as it is wiped on every build), the ISO still in release/.
+WORK="${AQ_WORK:+${AQ_WORK%/}/aequalyn-iso-work}"
+WORK="${WORK:-$ISO_REPO/work}"
 PROFILE="$WORK/profile"
 OUT="$WORK/out"
 CACHE="$WORK/pkg-cache"
@@ -79,6 +82,23 @@ if [[ -d "$WORK" && "${KEEP_WORK:-0}" != "1" ]]; then
     wipe "$WORK"
 fi
 mkdir -p "$PROFILE" "$OUT" "$CACHE" "$SKEL" "$OFFLINE"
+
+# A build holds the downloaded packages, the offline repository (hard links to
+# them), mkarchiso's tree of the live system with its squashfs image, and the
+# ISO: about 30 GB at its peak. Running out of room partway through fails with
+# a stream of "Write failed" errors, so stop here instead, while it is clear why.
+NEED_GB=${AQ_MIN_FREE_GB:-32}
+FREE_GB=$(df -BG --output=avail "$WORK" | tail -n1 | tr -dc '0-9')
+if [[ -n "$FREE_GB" ]] && (( FREE_GB < NEED_GB )); then
+    warn "only ${FREE_GB} GB free on the disk holding $WORK; a build needs about ${NEED_GB} GB"
+    for old in "$ISO_REPO"/release/*.iso; do
+        [[ -f "$old" ]] && info "  an earlier ISO you could delete: $old ($(du -h "$old" | cut -f1))"
+    done
+    info "  pacman's own cache can be trimmed with: paccache -rk1"
+    info "  or build on a bigger disk: AQ_WORK=/path/with/room sudo -E $0"
+    abort "not enough free space (set AQ_MIN_FREE_GB to change the check)"
+fi
+ok "free space: ${FREE_GB:-?} GB (needs about ${NEED_GB} GB)"
 
 # ------------------------------------------------------------- mirrors ---
 # The build downloads from Arch mirrors of its own, never the host's mirrorlist
@@ -474,7 +494,9 @@ else
     rm -rf "$TMP_DB"
 
     info "creating offline repository"
-    find "$CACHE" -name '*.pkg.tar.zst' -exec cp -n {} "$OFFLINE/" \;
+    # hard links, not copies: the cache and the repository are on the same disk,
+    # and a copy would hold every package twice (about 3 GB)
+    find "$CACHE" -name '*.pkg.tar.zst' -exec cp -nl {} "$OFFLINE/" \;
     COUNT=$(find "$OFFLINE" -name '*.pkg.tar.zst' | wc -l)
     [[ "$COUNT" -gt 0 ]] || abort "no packages downloaded"
     ( cd "$OFFLINE" && repo-add offline.db.tar.gz ./*.pkg.tar.zst )
@@ -544,7 +566,13 @@ ISO=$(ls -1 "$OUT"/*.iso 2>/dev/null | head -1 || true)
 [[ -n "$ISO" ]] || abort "no ISO produced in $OUT"
 mkdir -p "$ISO_REPO/release"
 DEST="$ISO_REPO/release/$(basename "$ISO")"
-cp "$ISO" "$DEST"
+# moved, not copied: a second copy is another 6.5 GB
+mv -f "$ISO" "$DEST"
 ok "ISO created: $DEST"
+# mkarchiso's tree of the live system is not needed once the ISO exists
+if [[ "${KEEP_WORK:-0}" != "1" ]]; then
+    wipe "$WORK/mkarchiso-work"
+    info "freed mkarchiso's work tree (KEEP_WORK=1 keeps it)"
+fi
 ls -lh "$DEST"
 info "sha256: $(sha256sum "$DEST" | cut -d' ' -f1)"
