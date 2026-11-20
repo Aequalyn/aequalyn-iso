@@ -153,6 +153,10 @@ find "$PROJECT" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null |
 # state, written into the checkout by the lock-screen tools, and must not
 # ship as if they were the templates next to them.
 find "$PROJECT/config/hypr/lockscreens" -maxdepth 1 -type f -name '.*' -delete 2>/dev/null || true
+# The web app keybinds are generated per home by aequalyn-webapp; a stray
+# committed webapps.lua would carry keybinds for apps the default set no
+# longer has, and would beat the generated one into every fresh home.
+rm -f "$PROJECT/config/hypr/webapps.lua"
 ok "source tree: $PROJECT"
 # Rebuild the profile every run: with KEEP_WORK=1 a file dropped from the
 # overlay (or from releng) would otherwise survive in work/profile/airootfs and
@@ -355,18 +359,19 @@ ln -sfn /usr/share/aequalyn/themes/aequalyn "$SKEL/.config/aequalyn/current/them
 [[ -f "$PROJECT/themes/aequalyn/backgrounds/1-night-aequalyn.jpg" ]] \
     || abort "the Aequalyn night wallpaper is missing from the theme bundle"
 
-# The core settings.json pins a generic dock list (firefox/nautilus). On the live
-# ISO pin the apps that are actually installed, plus the "Install Aequalyn"
-# launcher. Each id gets ".desktop" appended by the shell's first-run dock
-# migration; the three app icons come from their packages' hicolor icons and the
-# installer uses the Aequalyn mark shipped in the overlay.
+# The core settings.json pins a generic dock list. On the live ISO pin the
+# apps that are actually installed, plus the "Install Aequalyn" launcher.
+# Each id gets ".desktop" appended by the shell's first-run dock migration;
+# the three app icons come from their packages' hicolor icons, the installer
+# uses the Aequalyn mark shipped in the overlay, and the FM's entry (written
+# by session-start the moment the live user logs in) carries its own icon.
 info "pinning the live dock apps"
 python3 - "$SKEL/.config/aequalyn/settings.json" <<'PY'
 import json, sys
 p = sys.argv[1]
 d = json.load(open(p))
 d.setdefault("dock", {})["pinned"] = [
-    "kitty", "chromium", "org.gnome.Nautilus", "aequalyn-install"
+    "kitty", "chromium", "aequalyn.fm", "aequalyn-install"
 ]
 open(p, "w").write(json.dumps(d, indent=2) + "\n")
 PY
