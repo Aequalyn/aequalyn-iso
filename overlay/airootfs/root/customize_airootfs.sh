@@ -35,6 +35,12 @@ done
 for d in /home/live/.config/quickshell/plugins/*/bin; do
     [[ -d $d ]] && chmod 755 "$d"/* 2>/dev/null || true
 done
+# And their daemons: desktop-icons.py is exec'd directly for the desktop
+# icons feature (git carries it executable; the mode must survive the ISO).
+# Everything in a daemon dir is a helper nobody sources, so the lot may run.
+for d in /etc/skel/.config/quickshell/plugins/*/daemon /home/live/.config/quickshell/plugins/*/daemon; do
+    [[ -d $d ]] && chmod 755 "$d"/* 2>/dev/null || true
+done
 
 # The live user may install without a password.
 chmod 440 /etc/sudoers.d/live 2>/dev/null || true
