@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-# `bash` so the ISO does not depend on the exec bit of the /opt/aequalyn copy.
-exec bash /opt/aequalyn/installer/aequalyn-detect "$@"

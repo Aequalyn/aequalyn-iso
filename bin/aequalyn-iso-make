@@ -291,11 +291,19 @@ fi
 # ---------------------------------------------------------------- overlay ----
 info "overlaying Aequalyn airootfs files"
 cp -a "$SCRIPT_DIR/overlay/airootfs/." "$PROFILE/airootfs/"
-# Ship aequalyn-provision-user in /usr/local/bin too (it lives in the core bin/).
-if [[ -f "$PROJECT/bin/aequalyn-provision-user" ]]; then
-    cp "$PROJECT/bin/aequalyn-provision-user" "$PROFILE/airootfs/usr/local/bin/"
-    chmod 755 "$PROFILE/airootfs/usr/local/bin/aequalyn-provision-user"
-fi
+# The core's commands ship root-owned in /usr/local/bin, always fresh from the
+# assembled tree: the root gate's pinned actions point here (never a
+# user-writable path), the live session finds aequalyn-update/detect/store/...
+# without waiting for a first update, and the overlay no longer needs its own
+# copies of them to drift stale. ISO-only scripts (aequalyn-install,
+# -live-session, -live-update, -repair) are not in bin/ and stay as the
+# overlay ships them.
+info "shipping the core's bin/ into /usr/local/bin (fresh from the assembled tree)"
+for f in "$PROJECT/bin/"aequalyn-*; do
+    [[ -f "$f" ]] || continue
+    cp "$f" "$PROFILE/airootfs/usr/local/bin/$(basename "$f")"
+    chmod 755 "$PROFILE/airootfs/usr/local/bin/$(basename "$f")"
+done
 
 # The desktop the ISO starts with, for the live session and for installs made
 # from it (both take config/aequalyn/settings.json from this tree): the Islands
