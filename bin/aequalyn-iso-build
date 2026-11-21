@@ -13,6 +13,45 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT="$(cd "$HERE/.." && pwd)"
+
+# ---------------------------------------------------------------- menu ------
+# Interactive choice between a fresh build (download from Arch mirrors) and
+# reusing an already-downloaded work tree. Env vars KEEP_WORK/SKIP_DOWNLOAD
+# take precedence so the script stays usable non-interactively.
+if [[ -z "${KEEP_WORK+x}${SKIP_DOWNLOAD+x}" ]] && [[ -t 0 ]]; then
+    WORK_DIR="${AQ_WORK:+${AQ_WORK%/}/aequalyn-iso-work}"
+    WORK_DIR="${WORK_DIR:-$PROJECT/work}"
+    OFFLINE_DB="$WORK_DIR/profile/airootfs/var/cache/offline-repo/offline.db"
+
+    echo "Aequalyn ISO build"
+    echo
+    echo "  1) Build from source  - fresh download from Arch mirrors (slow)"
+    echo "  2) Skip download      - reuse existing work/offline repo (fast)"
+    echo
+    if [[ -f "$OFFLINE_DB" ]]; then
+        echo "  (existing offline repo found: $OFFLINE_DB)"
+    else
+        echo "  (no existing offline repo found; option 2 will download anyway)"
+    fi
+    echo
+    read -rp "Choose [1/2] (default 1): " CHOICE
+    case "${CHOICE:-1}" in
+        2)
+            KEEP_WORK=1
+            SKIP_DOWNLOAD=1
+            ;;
+        *)
+            KEEP_WORK=0
+            SKIP_DOWNLOAD=0
+            ;;
+    esac
+    export KEEP_WORK SKIP_DOWNLOAD
+    echo
+fi
+
+KEEP_WORK="${KEEP_WORK:-0}"
+SKIP_DOWNLOAD="${SKIP_DOWNLOAD:-0}"
 
 read -rsp "sudo password: " PW
 echo

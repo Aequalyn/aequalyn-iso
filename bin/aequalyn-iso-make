@@ -60,6 +60,33 @@ LOGFILE="$ISO_REPO/build.log"
 exec > >(tee -a "$LOGFILE") 2>&1
 info "build log: $LOGFILE"
 
+# ---------------------------------------------------------------- menu ------
+# Interactive choice between a fresh build and reusing an existing work tree.
+# Env vars KEEP_WORK/SKIP_DOWNLOAD take precedence (and are set by the wrapper).
+if [[ -z "${KEEP_WORK+x}${SKIP_DOWNLOAD+x}" ]] && [[ -t 0 ]]; then
+    OFFLINE_DB="$WORK/profile/airootfs/var/cache/offline-repo/offline.db"
+    echo
+    echo "Aequalyn ISO build"
+    echo "  1) Build from source  - fresh download from Arch mirrors (slow)"
+    echo "  2) Skip download      - reuse existing work/offline repo (fast)"
+    echo
+    if [[ -f "$OFFLINE_DB" ]]; then
+        echo "  (existing offline repo found)"
+    else
+        echo "  (no existing offline repo found; option 2 will download anyway)"
+    fi
+    echo
+    read -rp "Choose [1/2] (default 1): " CHOICE
+    case "${CHOICE:-1}" in
+        2) KEEP_WORK=1; SKIP_DOWNLOAD=1 ;;
+        *) KEEP_WORK=0; SKIP_DOWNLOAD=0 ;;
+    esac
+    export KEEP_WORK SKIP_DOWNLOAD
+    echo
+fi
+KEEP_WORK="${KEEP_WORK:-0}"
+SKIP_DOWNLOAD="${SKIP_DOWNLOAD:-0}"
+
 # ---------------------------------------------------------------- prereqs ---
 command -v mkarchiso >/dev/null || { info "installing archiso"; pacman -S --noconfirm archiso; }
 command -v repo-add  >/dev/null || { info "installing pacman-contrib"; pacman -S --noconfirm pacman-contrib; }
