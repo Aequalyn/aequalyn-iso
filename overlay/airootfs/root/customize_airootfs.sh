@@ -10,6 +10,15 @@ chmod 755 /etc/skel/.local/bin/* 2>/dev/null || true
 if [[ -d /home/live/.local/bin ]]; then
     chmod 755 /home/live/.local/bin/* 2>/dev/null || true
 fi
+# The watchdog lives in the shell tree; install.sh links it into ~/.local/bin
+# for real homes, but skips skel (its symlink would point back into /etc/skel).
+# The live user's home is a real home now, so give it the real link: the live
+# desktop starts supervised, with the sandbox and the root gate, exactly like
+# an installed one.
+if [[ -x /home/live/.config/quickshell/tools/watchdog/aequalyn-watchdog ]]; then
+    ln -sfn /home/live/.config/quickshell/tools/watchdog/aequalyn-watchdog \
+        /home/live/.local/bin/aequalyn-watchdog
+fi
 
 # Installer source tree in /opt/aequalyn (wrappers use `bash`, but keep these sane).
 if [[ -d /opt/aequalyn/bin ]]; then
