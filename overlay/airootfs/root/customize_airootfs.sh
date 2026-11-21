@@ -10,12 +10,21 @@ chmod 755 /etc/skel/.local/bin/* 2>/dev/null || true
 if [[ -d /home/live/.local/bin ]]; then
     chmod 755 /home/live/.local/bin/* 2>/dev/null || true
 fi
+# mkarchiso strips exec bits when it copies airootfs and skel into homes
+# ("cp -af --no-preserve=ownership,mode"), so restore what the shell runs at
+# runtime from its own tree BEFORE anything tests for it: the watchdog, and
+# every plugin's helper bins. Skel and the live home alike.
+for base in /etc/skel /home/live; do
+    [[ -d "$base/.config/quickshell" ]] || continue
+    chmod 755 "$base/.config/quickshell/tools/watchdog/aequalyn-watchdog" 2>/dev/null || true
+    find "$base/.config/quickshell" -type f -path "*/bin/*" -exec chmod 755 {} + 2>/dev/null || true
+done
 # The watchdog lives in the shell tree; install.sh links it into ~/.local/bin
 # for real homes, but skips skel (its symlink would point back into /etc/skel).
 # The live user's home is a real home now, so give it the real link: the live
 # desktop starts supervised, with the sandbox and the root gate, exactly like
 # an installed one.
-if [[ -x /home/live/.config/quickshell/tools/watchdog/aequalyn-watchdog ]]; then
+if [[ -f /home/live/.config/quickshell/tools/watchdog/aequalyn-watchdog ]]; then
     ln -sfn /home/live/.config/quickshell/tools/watchdog/aequalyn-watchdog \
         /home/live/.local/bin/aequalyn-watchdog
 fi
