@@ -4,7 +4,11 @@ Version=1.0
 Name=Install Aequalyn
 GenericName=System Installer
 Comment=Install Aequalyn on this computer
-Exec=sudo -E aequalyn-install
+# Through the desktop's root gate: the shell stages this session's Wayland
+# socket, the approval window opens, the live password feeds sudo, and the
+# installer GUI starts as root. (The old `sudo -E` only worked while the
+# live user still had passwordless sudo.)
+Exec=qs ipc call aequalyn install
 Icon=aequalyn-mark-dark
 StartupWMClass=aequalyn-install
 Terminal=false
