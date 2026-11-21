@@ -1,2 +1,5 @@
-# The live user may install without a password (the ISO is ephemeral).
-live ALL=(ALL) NOPASSWD: ALL
+# The live session behaves like an installed one: both accounts carry the
+# password "live", and sudo asks for it -- in a terminal, in the polkit
+# agent, and in the root gate's approval window. The live user is not in
+# wheel, so the rule is explicit: passworded, all commands, no exceptions.
+live ALL=(ALL) ALL
