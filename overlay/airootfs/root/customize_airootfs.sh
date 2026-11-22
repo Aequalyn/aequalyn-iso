@@ -94,4 +94,19 @@ pacman-key --populate archlinux >/dev/null 2>&1 || true
 # pacman-key starts gpg-agent; do not leave it running inside the image.
 gpgconf --homedir /etc/pacman.d/gnupg --kill all >/dev/null 2>&1 || true
 
+# The optional floating titlebar plugin: ship it into the live user's home (and
+# skel) so the deferred load in aequalyn-session-start and Super + Shift + T
+# can find it. The core tree carries it in /opt/aequalyn/bin.
+for base in /etc/skel /home/live; do
+    [[ -d "$base" ]] || continue
+    mkdir -p "$base/.local/lib/aequalyn"
+    if [[ -f /opt/aequalyn/bin/hyprbars.so ]]; then
+        cp -f /opt/aequalyn/bin/hyprbars.so "$base/.local/lib/aequalyn/hyprbars.so"
+        chmod 755 "$base/.local/lib/aequalyn/hyprbars.so"
+    fi
+done
+if [[ -d /home/live/.local/lib/aequalyn ]]; then
+    chown -R 1000:1000 /home/live/.local/lib/aequalyn 2>/dev/null || true
+fi
+
 exit 0
