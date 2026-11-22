@@ -58,3 +58,8 @@ from aequalyn-pkgs `aur-cache/`.
 ## Credits
 
 [nightdevil00](https://github.com/nightdevil00) contributed to the code here.
+
+## Documentation
+
+- `SECURITY.md` — security model and concerns.
+- `SKILL.md` — development/install skill reference.
