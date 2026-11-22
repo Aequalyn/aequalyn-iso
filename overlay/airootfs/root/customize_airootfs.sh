@@ -63,6 +63,21 @@ done
 # The live user may install without a password.
 chmod 440 /etc/sudoers.d/live 2>/dev/null || true
 
+# Raise the pam_faillock retry limit from the default 3 to 10 for the live
+# user (system-auth is shared by sudo), mirroring increase-lockout-limit.sh.
+if [[ -f /etc/pam.d/system-auth ]]; then
+    sed -i 's|^\(auth\s\+required\s\+pam_faillock.so\)\s\+preauth.*$|\1 preauth silent deny=10 unlock_time=120|' \
+        /etc/pam.d/system-auth
+    sed -i 's|^\(auth\s\+\[default=die\]\s\+pam_faillock.so\)\s\+authfail.*$|\1 authfail deny=10 unlock_time=120|' \
+        /etc/pam.d/system-auth
+fi
+if [[ -f /etc/pam.d/sddm-autologin ]]; then
+    sed -i '/pam_faillock\.so preauth/d'  /etc/pam.d/sddm-autologin
+    sed -i '/pam_faillock\.so authsucc/d' /etc/pam.d/sddm-autologin
+    sed -i '/auth.*pam_permit\.so/a auth        required    pam_faillock.so authsucc' \
+        /etc/pam.d/sddm-autologin
+fi
+
 # Plymouth boot splash: the theme is staged in the image by the ISO build.
 # Set it as the default and rebuild the initramfs in the same step, because the
 # initramfs built during pacstrap used the package's default theme.
@@ -73,9 +88,30 @@ else
     echo "WARNING: /usr/share/plymouth/themes/aequalyn is missing; no boot splash" >&2
 fi
 
+# Fix directory permissions: pacstrap may inherit a restrictive umask from the
+# build environment, leaving /, /etc, /var, /home, /boot unreadable by non-root
+# users (dbus, sddm, systemd services). That breaks D-Bus and SDDM autologin.
+chmod 755 / 2>/dev/null || true
+for d in etc var home boot usr opt srv mnt; do
+    [[ -e /$d ]] || continue
+    chmod 755 /$d 2>/dev/null || true
+done
+chmod 700 /root 2>/dev/null || true
+chmod 1777 /tmp 2>/dev/null || true
+
 # SDDM owns the boot login: it autologins `live` into the guarded Hyprland
 # session. This runs in the archiso chroot, so `systemctl enable` just writes
 # the display-manager.service alias (no daemon is started here).
+# Make sure the autologin config is present and points at a real session.
+mkdir -p /etc/sddm.conf.d
+if [[ ! -f /etc/sddm.conf.d/autologin.conf ]]; then
+    cat > /etc/sddm.conf.d/autologin.conf <<'EOF'
+[Autologin]
+User=live
+Session=aequalyn
+Relogin=false
+EOF
+fi
 systemctl enable sddm.service 2>/dev/null || true
 
 # NetworkManager must come up at boot: the shell bar's network indicator talks
