@@ -6,7 +6,23 @@
 
 
 
+
+
+
+
+
+
+
+
 # archiso runs this in the airootfs chroot after /etc/skel has been copied to
+
+
+
+
+
+
+
+
 
 
 
@@ -22,6 +38,14 @@
 
 
 
+
+
+
+
+
+
+
+
 # from custom airootfs files, so restore them here (file_permissions in
 
 
@@ -30,7 +54,23 @@
 
 
 
+
+
+
+
+
+
+
+
 # profiledef.sh cannot cover every generated file).
+
+
+
+
+
+
+
+
 
 
 
@@ -54,7 +94,31 @@ set -e
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Live user helpers (aequalyn-session-start is exec'd by the Hyprland session).
+
+
+
+
+
+
+
+
 
 
 
@@ -70,7 +134,23 @@ chmod 755 /etc/skel/.local/bin/* 2>/dev/null || true
 
 
 
+
+
+
+
+
+
+
+
 if [[ -d /home/live/.local/bin ]]; then
+
+
+
+
+
+
+
+
 
 
 
@@ -86,7 +166,23 @@ if [[ -d /home/live/.local/bin ]]; then
 
 
 
+
+
+
+
+
+
+
+
 fi
+
+
+
+
+
+
+
+
 
 
 
@@ -102,7 +198,23 @@ fi
 
 
 
+
+
+
+
+
+
+
+
 # ("cp -af --no-preserve=ownership,mode"), so restore what the shell runs at
+
+
+
+
+
+
+
+
 
 
 
@@ -118,7 +230,23 @@ fi
 
 
 
+
+
+
+
+
+
+
+
 # every plugin's helper bins. Skel and the live home alike.
+
+
+
+
+
+
+
+
 
 
 
@@ -134,7 +262,23 @@ for base in /etc/skel /home/live; do
 
 
 
+
+
+
+
+
+
+
+
     [[ -d "$base/.config/quickshell" ]] || continue
+
+
+
+
+
+
+
+
 
 
 
@@ -150,7 +294,23 @@ for base in /etc/skel /home/live; do
 
 
 
+
+
+
+
+
+
+
+
     find "$base/.config/quickshell" -type f -path "*/bin/*" -exec chmod 755 {} + 2>/dev/null || true
+
+
+
+
+
+
+
+
 
 
 
@@ -166,7 +326,23 @@ done
 
 
 
+
+
+
+
+
+
+
+
 # install.sh copies the shell from /opt/aequalyn/shell into new homes. That
+
+
+
+
+
+
+
+
 
 
 
@@ -182,7 +358,23 @@ done
 
 
 
+
+
+
+
+
+
+
+
 # otherwise the installed launcher is 644 and its .desktop entry cannot run.
+
+
+
+
+
+
+
+
 
 
 
@@ -198,7 +390,23 @@ if [[ -d /opt/aequalyn/shell ]]; then
 
 
 
+
+
+
+
+
+
+
+
     chmod 755 /opt/aequalyn/shell/tools/watchdog/aequalyn-watchdog \
+
+
+
+
+
+
+
+
 
 
 
@@ -214,6 +422,14 @@ if [[ -d /opt/aequalyn/shell ]]; then
 
 
 
+
+
+
+
+
+
+
+
     find /opt/aequalyn/shell -type f -path "*/bin/*" -exec chmod 755 {} + 2>/dev/null || true
 
 
@@ -222,7 +438,23 @@ if [[ -d /opt/aequalyn/shell ]]; then
 
 
 
+
+
+
+
+
+
+
+
 fi
+
+
+
+
+
+
+
+
 
 
 
@@ -238,7 +470,23 @@ fi
 
 
 
+
+
+
+
+
+
+
+
 # for real homes, but skips skel (its symlink would point back into /etc/skel).
+
+
+
+
+
+
+
+
 
 
 
@@ -254,7 +502,23 @@ fi
 
 
 
+
+
+
+
+
+
+
+
 # desktop starts supervised, with the sandbox and the root gate, exactly like
+
+
+
+
+
+
+
+
 
 
 
@@ -270,7 +534,23 @@ fi
 
 
 
+
+
+
+
+
+
+
+
 if [[ -f /home/live/.config/quickshell/tools/watchdog/aequalyn-watchdog ]]; then
+
+
+
+
+
+
+
+
 
 
 
@@ -286,6 +566,14 @@ if [[ -f /home/live/.config/quickshell/tools/watchdog/aequalyn-watchdog ]]; then
 
 
 
+
+
+
+
+
+
+
+
         /home/live/.local/bin/aequalyn-watchdog
 
 
@@ -294,7 +582,31 @@ if [[ -f /home/live/.config/quickshell/tools/watchdog/aequalyn-watchdog ]]; then
 
 
 
+
+
+
+
+
+
+
+
 fi
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -318,7 +630,23 @@ fi
 
 
 
+
+
+
+
+
+
+
+
 if [[ -d /opt/aequalyn/bin ]]; then
+
+
+
+
+
+
+
+
 
 
 
@@ -334,7 +662,23 @@ if [[ -d /opt/aequalyn/bin ]]; then
 
 
 
+
+
+
+
+
+
+
+
 fi
+
+
+
+
+
+
+
+
 
 
 
@@ -350,6 +694,14 @@ if [[ -d /opt/aequalyn/installer ]]; then
 
 
 
+
+
+
+
+
+
+
+
     chmod 755 /opt/aequalyn/installer/aequalyn-* /opt/aequalyn/installer/lib/*.sh 2>/dev/null || true
 
 
@@ -358,7 +710,23 @@ if [[ -d /opt/aequalyn/installer ]]; then
 
 
 
+
+
+
+
+
+
+
+
 fi
+
+
+
+
+
+
+
+
 
 
 
@@ -382,7 +750,31 @@ chmod 755 /opt/aequalyn/install.sh /usr/local/bin/aequalyn-* 2>/dev/null || true
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Universal clipboard: wl-paste --watch runs this capture helper.
+
+
+
+
+
+
+
+
 
 
 
@@ -398,7 +790,23 @@ chmod 755 /etc/skel/.config/quickshell/plugins/clipboard/capture.sh 2>/dev/null 
 
 
 
+
+
+
+
+
+
+
+
 if [[ -d /home/live/.config/quickshell/plugins/clipboard ]]; then
+
+
+
+
+
+
+
+
 
 
 
@@ -414,7 +822,31 @@ if [[ -d /home/live/.config/quickshell/plugins/clipboard ]]; then
 
 
 
+
+
+
+
+
+
+
+
 fi
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -438,7 +870,23 @@ fi
 
 
 
+
+
+
+
+
+
+
+
 # `python3`, but the FM's launcher is exec'd directly (its desktop entry and
+
+
+
+
+
+
+
+
 
 
 
@@ -454,7 +902,23 @@ fi
 
 
 
+
+
+
+
+
+
+
+
 for d in /etc/skel/.config/quickshell/plugins/*/bin; do
+
+
+
+
+
+
+
+
 
 
 
@@ -470,7 +934,23 @@ for d in /etc/skel/.config/quickshell/plugins/*/bin; do
 
 
 
+
+
+
+
+
+
+
+
 done
+
+
+
+
+
+
+
+
 
 
 
@@ -486,6 +966,14 @@ for d in /home/live/.config/quickshell/plugins/*/bin; do
 
 
 
+
+
+
+
+
+
+
+
     [[ -d $d ]] && chmod 755 "$d"/* 2>/dev/null || true
 
 
@@ -494,7 +982,23 @@ for d in /home/live/.config/quickshell/plugins/*/bin; do
 
 
 
+
+
+
+
+
+
+
+
 done
+
+
+
+
+
+
+
+
 
 
 
@@ -510,7 +1014,23 @@ done
 
 
 
+
+
+
+
+
+
+
+
 # icons feature (git carries it executable; the mode must survive the ISO).
+
+
+
+
+
+
+
+
 
 
 
@@ -526,7 +1046,23 @@ done
 
 
 
+
+
+
+
+
+
+
+
 for d in /etc/skel/.config/quickshell/plugins/*/daemon /home/live/.config/quickshell/plugins/*/daemon; do
+
+
+
+
+
+
+
+
 
 
 
@@ -542,7 +1078,23 @@ for d in /etc/skel/.config/quickshell/plugins/*/daemon /home/live/.config/quicks
 
 
 
+
+
+
+
+
+
+
+
 done
+
+
+
+
+
+
+
+
 
 
 
@@ -558,7 +1110,23 @@ done
 
 
 
+
+
+
+
+
+
+
+
 # the copy, but fixing the source too keeps a live install and a later
+
+
+
+
+
+
+
+
 
 
 
@@ -574,7 +1142,23 @@ done
 
 
 
+
+
+
+
+
+
+
+
 for d in /opt/aequalyn/shell/plugins/*/bin /opt/aequalyn/shell/plugins/*/daemon; do
+
+
+
+
+
+
+
+
 
 
 
@@ -590,7 +1174,31 @@ for d in /opt/aequalyn/shell/plugins/*/bin /opt/aequalyn/shell/plugins/*/daemon;
 
 
 
+
+
+
+
+
+
+
+
 done
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -614,7 +1222,31 @@ done
 
 
 
+
+
+
+
+
+
+
+
 chmod 440 /etc/sudoers.d/live 2>/dev/null || true
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -638,7 +1270,23 @@ chmod 440 /etc/sudoers.d/live 2>/dev/null || true
 
 
 
+
+
+
+
+
+
+
+
 # Set it as the default and rebuild the initramfs in the same step, because the
+
+
+
+
+
+
+
+
 
 
 
@@ -654,7 +1302,23 @@ chmod 440 /etc/sudoers.d/live 2>/dev/null || true
 
 
 
+
+
+
+
+
+
+
+
 if [[ -f /usr/share/plymouth/themes/aequalyn/aequalyn.plymouth ]]; then
+
+
+
+
+
+
+
+
 
 
 
@@ -670,7 +1334,23 @@ if [[ -f /usr/share/plymouth/themes/aequalyn/aequalyn.plymouth ]]; then
 
 
 
+
+
+
+
+
+
+
+
     plymouth-set-default-theme aequalyn -R
+
+
+
+
+
+
+
+
 
 
 
@@ -686,7 +1366,23 @@ else
 
 
 
+
+
+
+
+
+
+
+
     echo "WARNING: /usr/share/plymouth/themes/aequalyn is missing; no boot splash" >&2
+
+
+
+
+
+
+
+
 
 
 
@@ -702,7 +1398,19 @@ fi
 
 
 
+
+
+
+
+
+
+
+
 # Fix directory permissions: pacstrap may inherit a restrictive umask from the
+
+
+
+
 
 
 
@@ -710,7 +1418,15 @@ fi
 
 
 
+
+
+
+
 # users (dbus, sddm, systemd services). That breaks D-Bus and SDDM autologin.
+
+
+
+
 
 
 
@@ -718,7 +1434,15 @@ chmod 755 / 2>/dev/null || true
 
 
 
+
+
+
+
 for d in etc var home boot usr opt srv mnt; do
+
+
+
+
 
 
 
@@ -726,11 +1450,23 @@ for d in etc var home boot usr opt srv mnt; do
 
 
 
+
+
+
+
     chmod 755 /$d 2>/dev/null || true
 
 
 
+
+
+
+
 done
+
+
+
+
 
 
 
@@ -738,7 +1474,15 @@ chmod 700 /root 2>/dev/null || true
 
 
 
+
+
+
+
 chmod 1777 /tmp 2>/dev/null || true
+
+
+
+
 
 
 
@@ -746,7 +1490,15 @@ chmod 1777 /tmp 2>/dev/null || true
 
 
 
+
+
+
+
 # They must stay world-traversable: package tools and unprivileged helpers read
+
+
+
+
 
 
 
@@ -754,7 +1506,15 @@ chmod 1777 /tmp 2>/dev/null || true
 
 
 
+
+
+
+
 for d in /var/lib/pacman /var/lib/pacman/local /var/lib/pacman/sync \
+
+
+
+
 
 
 
@@ -762,11 +1522,59 @@ for d in /var/lib/pacman /var/lib/pacman/local /var/lib/pacman/sync \
 
 
 
+
+
+
+
     [[ -d $d ]] && chmod 755 "$d" 2>/dev/null || true
 
 
 
+
+
+
+
 done
+
+
+
+# Chromium-family browsers run as the desktop user and read their managed
+
+
+
+# policy from /etc/<browser>/policies/managed. A restrictive build umask can
+
+
+
+# leave /etc/opt and friends 0700: the 0644 color.json is then unreadable and
+
+
+
+# the user half of aequalyn-browser-theme cannot see it, so every theme change
+
+
+
+# asks for approval again. Keep the whole path traversable in the live image.
+
+
+
+for d in /etc/opt /etc/chromium /etc/brave /etc/vivaldi /etc/yandex-browser; do
+
+
+
+    [[ -d $d ]] && chmod 755 "$d" 2>/dev/null || true
+
+
+
+
+
+
+
+done
+
+
+
+
 
 
 
@@ -774,7 +1582,15 @@ done
 
 
 
+
+
+
+
 # mkarchiso's mode stripping can leave this directory root-only.
+
+
+
+
 
 
 
@@ -782,7 +1598,15 @@ chmod 755 /usr/share/aequalyn 2>/dev/null || true
 
 
 
+
+
+
+
 [[ -e /usr/share/aequalyn/lockscreens.enabled ]] \
+
+
+
+
 
 
 
@@ -790,7 +1614,15 @@ chmod 755 /usr/share/aequalyn 2>/dev/null || true
 
 
 
+
+
+
+
 # The Quickshell lock plugin will not lock without its PAM service files. The
+
+
+
+
 
 
 
@@ -798,7 +1630,15 @@ chmod 755 /usr/share/aequalyn 2>/dev/null || true
 
 
 
+
+
+
+
 # helper read the live user's templates rather than root's.
+
+
+
+
 
 
 
@@ -806,7 +1646,15 @@ for apply_lock in /home/live/.local/bin/aequalyn-apply-lock \
 
 
 
+
+
+
+
                   /etc/skel/.local/bin/aequalyn-apply-lock; do
+
+
+
+
 
 
 
@@ -814,7 +1662,15 @@ for apply_lock in /home/live/.local/bin/aequalyn-apply-lock \
 
 
 
+
+
+
+
     if ! SUDO_USER=live "$apply_lock" >/dev/null 2>&1; then
+
+
+
+
 
 
 
@@ -822,11 +1678,25 @@ for apply_lock in /home/live/.local/bin/aequalyn-apply-lock \
 
 
 
+
+
+
+
     fi
 
 
 
-    break
+
+
+
+
+    breakfor d in /etc/opt/* /etc/chromium/* /etc/brave/* /etc/vivaldi/* /etc/yandex-browser/*; do
+
+
+
+    [[ -d $d ]] && chmod 755 "$d" 2>/dev/null || true
+
+
 
 
 
@@ -834,7 +1704,167 @@ done
 
 
 
+for d in /etc/opt/*/policies/managed /etc/chromium/policies/managed \
+
+
+
+         /etc/brave/policies/managed /etc/vivaldi/policies/managed \
+
+
+
+         /etc/yandex-browser/policies/managed; do
+
+
+
+    [[ -d $d ]] || continue
+
+
+
+    chmod 755 "$d" 2>/dev/null || true
+
+
+
+    [[ -f $d/color.json ]] && chmod 644 "$d/color.json" 2>/dev/null || true
+
+
+
+done# The desktop watches /usr/share/aequalyn/lockscreens.enabled with a FileView;
+
+
+
+
+
+
+
+# mkarchiso's mode stripping can leave this directory root-only.
+
+
+
+
+
+
+
+chmod 755 /usr/share/aequalyn 2>/dev/null || true
+
+
+
+
+
+
+
+[[ -e /usr/share/aequalyn/lockscreens.enabled ]] \
+
+
+
+
+
+
+
+    && chmod 644 /usr/share/aequalyn/lockscreens.enabled 2>/dev/null || true
+
+
+
+
+
+
+
+# The Quickshell lock plugin will not lock without its PAM service files. The
+
+
+
+
+
+
+
+# live image has no migration runner, so install them here. SUDO_USER makes the
+
+
+
+
+
+
+
+# helper read the live user's templates rather than root's.
+
+
+
+
+
+
+
+for apply_lock in /home/live/.local/bin/aequalyn-apply-lock \
+
+
+
+
+
+
+
+                  /etc/skel/.local/bin/aequalyn-apply-lock; do
+
+
+
+
+
+
+
+    [[ -x $apply_lock ]] || continue
+
+
+
+
+
+
+
+    if ! SUDO_USER=live "$apply_lock" >/dev/null 2>&1; then
+
+
+
+
+
+
+
+        echo "WARNING: could not install the live lock screen's PAM stacks" >&2
+
+
+
+
+
+
+
+    fi
+
+
+
+
+
+
+
+    break
+
+
+
+
+
+
+
+done
+
+
+
+
+
+
+
 # SDDM owns the boot login: it autologins `live` into the guarded Hyprland
+
+
+
+
+
+
+
+
 
 
 
@@ -850,7 +1880,23 @@ done
 
 
 
+
+
+
+
+
+
+
+
 # the display-manager.service alias (no daemon is started here).
+
+
+
+
+
+
+
+
 
 
 
@@ -874,7 +1920,31 @@ systemctl enable sddm.service 2>/dev/null || true
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # NetworkManager must come up at boot: the shell bar's network indicator talks
+
+
+
+
+
+
+
+
 
 
 
@@ -890,6 +1960,14 @@ systemctl enable sddm.service 2>/dev/null || true
 
 
 
+
+
+
+
+
+
+
+
 # online installs. Like sddm above, this only records the default target
 
 
@@ -898,7 +1976,23 @@ systemctl enable sddm.service 2>/dev/null || true
 
 
 
+
+
+
+
+
+
+
+
 # symlink -- nothing is started inside the build chroot.
+
+
+
+
+
+
+
+
 
 
 
@@ -922,7 +2016,31 @@ systemctl enable NetworkManager.service 2>/dev/null || true
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Guarantee a usable pacman keyring in the live image. archlinux-keyring's
+
+
+
+
+
+
+
+
 
 
 
@@ -938,7 +2056,23 @@ systemctl enable NetworkManager.service 2>/dev/null || true
 
 
 
+
+
+
+
+
+
+
+
 # online installer dies at pacstrap with "invalid or corrupted package (PGP
+
+
+
+
+
+
+
+
 
 
 
@@ -954,7 +2088,23 @@ systemctl enable NetworkManager.service 2>/dev/null || true
 
 
 
+
+
+
+
+
+
+
+
 # the local signing key when one is missing.
+
+
+
+
+
+
+
+
 
 
 
@@ -970,6 +2120,14 @@ pacman-key --init >/dev/null 2>&1 || true
 
 
 
+
+
+
+
+
+
+
+
 pacman-key --populate archlinux >/dev/null 2>&1 || true
 
 
@@ -978,7 +2136,23 @@ pacman-key --populate archlinux >/dev/null 2>&1 || true
 
 
 
+
+
+
+
+
+
+
+
 # pacman-key starts gpg-agent; do not leave it running inside the image.
+
+
+
+
+
+
+
+
 
 
 
@@ -1000,4 +2174,16 @@ gpgconf --homedir /etc/pacman.d/gnupg --kill all >/dev/null 2>&1 || true
 
 
 
-exit 0
+
+
+
+
+
+
+
+
+
+
+
+
+

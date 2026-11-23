@@ -1,72 +1,144 @@
 #!/usr/bin/env bash
 
+
+
 # aequalyn-iso-make -- build the Aequalyn live/install ISO with archiso.
 
+
+
 #
+
+
 
 # The desktop lives in several repositories. They are assembled into one
 
+
+
 # source tree first (the layout the installer expects in /opt/aequalyn):
 
+
+
 #
+
+
 
 #   aequalyn            -> .            core: bin/, config/, install.sh
 
+
+
 #   aequalyn-shell      -> shell/
+
+
 
 #   aequalyn-installer  -> installer/
 
+
+
 #   aequalyn-pkgs       -> packages/    (lists/ + aur-cache/)
+
+
 
 #   aequalyn-themes     -> themes/
 
+
+
 #
+
+
 
 # By default the repositories are taken from sibling checkouts next to this
 
+
+
 # one; --local-source DIR points elsewhere, and anything missing is cloned
+
+
 
 # from github.com/Aequalyn.
 
+
+
 #
+
+
 
 #   1. Copy the releng profile as a base.
 
+
+
 #   2. Overlay iso/overlay/ (live user, autologin, pacman configs, skel).
+
+
 
 #   3. Populate /etc/skel with the Aequalyn shell + configs via install.sh --skel,
 
+
+
 #      so mkarchiso copies them into /home/live/.config at boot.
+
+
 
 #   4. Copy the whole Aequalyn source tree into /opt/aequalyn (installer reads it).
 
+
+
 #   5. Download base + desktop + default packages into a bundled offline repo.
+
+
 
 #   6. Add the desktop packages to the ISO's packages.x86_64.
 
+
+
 #   7. Run mkarchiso and copy the finished ISO to the project root.
+
+
 
 #
 
+
+
 # Run as root:  sudo ./bin/aequalyn-iso-make [--local-source DIR]
+
+
 
 set -euo pipefail
 
+
+
 # never stop silently: say which line failed
+
+
 
 trap 'echo -e "\033[0;31mABORT:\033[0m line $LINENO failed (exit $?): $BASH_COMMAND"' ERR
 
 
 
+
+
+
+
 R='\033[0;31m'; G='\033[0;32m'; B='\033[0;34m'; N='\033[0m'
+
+
 
 info() { echo -e "${B}INFO:${N} $*"; }
 
+
+
 ok()   { echo -e "${G}OK:${N} $*"; }
+
+
 
 warn() { echo -e "${R}WARN:${N} $*"; }
 
+
+
 abort(){ echo -e "${R}ABORT:${N} $*"; exit 1; }
+
+
+
+
 
 
 
@@ -74,1162 +146,2330 @@ abort(){ echo -e "${R}ABORT:${N} $*"; exit 1; }
 
 
 
+
+
+
+
 ISO_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+
 
 SCRIPT_DIR="$ISO_REPO"
 
+
+
 SOURCES="$(dirname "$ISO_REPO")"
+
+
 
 AEQUALYN_GIT=${AEQUALYN_GIT:-https://github.com/Aequalyn}
 
+
+
 while [[ $# -gt 0 ]]; do
+
+
 
     case "$1" in
 
+
+
         --local-source) SOURCES=$(cd "$2" && pwd); shift 2 ;;
+
+
 
         -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
 
+
+
         *) abort "unknown option: $1" ;;
+
+
 
     esac
 
+
+
 done
+
+
 
 # AQ_WORK=<dir> builds on another disk: the work tree goes in <dir>/aequalyn-iso-work
 
+
+
 # (its own folder, as it is wiped on every build), the ISO still in release/.
+
+
 
 WORK="${AQ_WORK:+${AQ_WORK%/}/aequalyn-iso-work}"
 
+
+
 WORK="${WORK:-$ISO_REPO/work}"
+
+
 
 PROFILE="$WORK/profile"
 
+
+
 OUT="$WORK/out"
+
+
 
 CACHE="$WORK/pkg-cache"
 
+
+
 SKEL="$PROFILE/airootfs/etc/skel"
+
+
 
 OFFLINE="$PROFILE/airootfs/var/cache/offline-repo"
 
+
+
 LOGFILE="$ISO_REPO/build.log"
 
+
+
 exec > >(tee -a "$LOGFILE") 2>&1
+
+
 
 info "build log: $LOGFILE"
 
 
 
+
+
+
+
 # ---------------------------------------------------------------- menu ------
+
+
 
 # Interactive choice between a fresh build and reusing an existing work tree.
 
+
+
 # Env vars KEEP_WORK/SKIP_DOWNLOAD take precedence (and are set by the wrapper).
+
+
 
 if [[ -z "${KEEP_WORK+x}${SKIP_DOWNLOAD+x}" ]] && [[ -t 0 ]]; then
 
+
+
     OFFLINE_DB="$WORK/profile/airootfs/var/cache/offline-repo/offline.db"
 
+
+
     echo
+
+
 
     echo "Aequalyn ISO build"
 
+
+
     echo "  1) Build from source  - fresh download from Arch mirrors (slow)"
+
+
 
     echo "  2) Skip download      - reuse existing work/offline repo (fast)"
 
+
+
     echo
+
+
 
     if [[ -f "$OFFLINE_DB" ]]; then
 
+
+
         echo "  (existing offline repo found)"
+
+
 
     else
 
+
+
         echo "  (no existing offline repo found; option 2 will download anyway)"
+
+
 
     fi
 
+
+
     echo
+
+
 
     read -rp "Choose [1/2] (default 1): " CHOICE
 
+
+
     case "${CHOICE:-1}" in
+
+
 
         2) KEEP_WORK=1; SKIP_DOWNLOAD=1 ;;
 
+
+
         *) KEEP_WORK=0; SKIP_DOWNLOAD=0 ;;
+
+
 
     esac
 
+
+
     export KEEP_WORK SKIP_DOWNLOAD
+
+
 
     echo
 
+
+
 fi
 
+
+
 KEEP_WORK="${KEEP_WORK:-0}"
+
+
 
 SKIP_DOWNLOAD="${SKIP_DOWNLOAD:-0}"
 
 
 
+
+
+
+
 # ---------------------------------------------------------------- prereqs ---
+
+
 
 command -v mkarchiso >/dev/null || { info "installing archiso"; pacman -S --noconfirm archiso; }
 
+
+
 command -v repo-add  >/dev/null || { info "installing pacman-contrib"; pacman -S --noconfirm pacman-contrib; }
 
+
+
 RELENG=/usr/share/archiso/configs/releng
+
+
 
 [[ -d "$RELENG" ]] || abort "releng profile missing ($RELENG)"
 
 
 
+
+
+
+
 # ---------------------------------------------------------------- work dir ---
+
+
 
 # A failed mkarchiso can leave /proc, /sys and /dev mounted inside its chroot.
 
+
+
 # Unmount anything under work/ before deleting it: rm -rf through a mounted
+
+
 
 # /dev would delete the host's device nodes.
 
+
+
 unmount_work() {
+
+
 
     local m
 
+
+
     findmnt -rno TARGET 2>/dev/null | awk -v w="$WORK/" 'index($0, w) == 1' | sort -r | while read -r m; do
+
+
 
         umount -R "$m" 2>/dev/null || umount -l "$m" 2>/dev/null || true
 
+
+
     done
+
+
 
 }
 
+
+
 wipe() { unmount_work; rm -rf --one-file-system "$1"; }
+
+
 
 if [[ -d "$WORK" && "${KEEP_WORK:-0}" != "1" ]]; then
 
+
+
     info "cleaning $WORK"
+
+
 
     wipe "$WORK"
 
+
+
 fi
+
+
 
 mkdir -p "$PROFILE" "$OUT" "$CACHE" "$SKEL" "$OFFLINE"
 
 
 
+
+
+
+
 # A build holds the downloaded packages, the offline repository (hard links to
+
+
 
 # them), mkarchiso's tree of the live system with its squashfs image, and the
 
+
+
 # ISO: about 30 GB at its peak. Running out of room partway through fails with
+
+
 
 # a stream of "Write failed" errors, so stop here instead, while it is clear why.
 
+
+
 NEED_GB=${AQ_MIN_FREE_GB:-32}
+
+
 
 FREE_GB=$(df -BG --output=avail "$WORK" | tail -n1 | tr -dc '0-9')
 
+
+
 if [[ -n "$FREE_GB" ]] && (( FREE_GB < NEED_GB )); then
+
+
 
     warn "only ${FREE_GB} GB free on the disk holding $WORK; a build needs about ${NEED_GB} GB"
 
+
+
     for old in "$ISO_REPO"/release/*.iso; do
+
+
 
         [[ -f "$old" ]] && info "  an earlier ISO you could delete: $old ($(du -h "$old" | cut -f1))"
 
+
+
     done
+
+
 
     info "  pacman's own cache can be trimmed with: paccache -rk1"
 
+
+
     info "  or build on a bigger disk: AQ_WORK=/path/with/room sudo -E $0"
+
+
 
     abort "not enough free space (set AQ_MIN_FREE_GB to change the check)"
 
+
+
 fi
+
+
 
 ok "free space: ${FREE_GB:-?} GB (needs about ${NEED_GB} GB)"
 
 
 
+
+
+
+
 # ------------------------------------------------------------- mirrors ---
+
+
 
 # The build downloads from Arch mirrors of its own, never the host's mirrorlist
 
+
+
 # (the host's own mirror). AQ_MIRRORLIST=<file> overrides.
+
+
 
 MIRRORLIST="$WORK/mirrorlist"
 
+
+
 if [[ -n "${AQ_MIRRORLIST:-}" ]]; then
+
+
 
     cp "$AQ_MIRRORLIST" "$MIRRORLIST"
 
+
+
 else
+
+
 
     cat > "$MIRRORLIST" <<'MIRRORS'
 
+
+
 Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
+
+
 
 Server = https://mirror.rackspace.com/archlinux/$repo/os/$arch
 
+
+
 Server = https://archlinux.mirror.liteserver.nl/$repo/os/$arch
+
+
 
 Server = https://mirror.netcologne.de/archlinux/$repo/os/$arch
 
+
+
 Server = https://mirrors.kernel.org/archlinux/$repo/os/$arch
+
+
 
 MIRRORS
 
+
+
 fi
+
+
 
 info "mirrors: $(grep -c '^Server' "$MIRRORLIST") ($MIRRORLIST)"
 
 
 
+
+
+
+
 # ---------------------------------------------------------- source tree ---
+
+
 
 PROJECT="$WORK/source"
 
+
+
 repo_dir() { # repo_dir <name> -> checkout path (sibling or fresh clone)
+
+
 
     if [[ -d "$SOURCES/$1" ]]; then printf '%s' "$SOURCES/$1"; return; fi
 
+
+
     local dest="$WORK/clones/$1"
+
+
 
     [[ -d "$dest" ]] || git clone -q --depth 1 "$AEQUALYN_GIT/$1.git" "$dest" || abort "cannot get $1"
 
+
+
     printf '%s' "$dest"
+
+
 
 }
 
+
+
 info "assembling the source tree from $SOURCES"
+
+
 
 rm -rf "$PROJECT"; mkdir -p "$PROJECT/packages"
 
+
+
 CORE=$(repo_dir aequalyn)
+
+
 
 for item in bin config assets docs plymouth migrations install.sh VERSION README.md SKILL.md; do
 
+
+
     [[ -e "$CORE/$item" ]] && cp -a "$CORE/$item" "$PROJECT/"
 
+
+
 done
+
+
 
 mkdir -p "$PROJECT/shell"; cp -a "$(repo_dir aequalyn-shell)/." "$PROJECT/shell/"
 
+
+
 mkdir -p "$PROJECT/installer"; cp -a "$(repo_dir aequalyn-installer)/." "$PROJECT/installer/"
+
+
 
 PKGS=$(repo_dir aequalyn-pkgs)
 
+
+
 cp -a "$PKGS/lists/." "$PROJECT/packages/"
+
+
 
 [[ -d "$PKGS/aur-cache" ]] && cp -a "$PKGS/aur-cache" "$PROJECT/packages/"
 
+
+
 # The ISO ships Aequalyn's own theme bundles only (night and day); the rest of
+
+
 
 # the catalogue installs later from the control center or aequalyn-themes.
 
+
+
 ISO_THEMES=(aequalyn aequalyn-day)
+
+
 
 THEMES=$(repo_dir aequalyn-themes)
 
+
+
 mkdir -p "$PROJECT/themes"
+
+
 
 for t in "${ISO_THEMES[@]}"; do
 
+
+
     [[ -f "$THEMES/themes/$t/theme.json" ]] || abort "theme bundle missing: $THEMES/themes/$t"
+
+
 
     cp -a "$THEMES/themes/$t" "$PROJECT/themes/"
 
+
+
 done
+
+
 
 find "$PROJECT" -name .git -prune -exec rm -rf {} +
 
+
+
 # Drop Python bytecode caches that can sneak in from running the helpers.
+
+
 
 find "$PROJECT" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
 
+
+
 # Drop the lock-screen configs aequalyn generates from the running wallpaper
+
+
 
 # (config/hypr/lockscreens/.classic, .wallpaper, ...): they are per-machine
 
+
+
 # state, written into the checkout by the lock-screen tools, and must not
+
+
 
 # ship as if they were the templates next to them.
 
+
+
 find "$PROJECT/config/hypr/lockscreens" -maxdepth 1 -type f -name '.*' -delete 2>/dev/null || true
+
+
 
 # The web app keybinds are generated per home by aequalyn-webapp; a stray
 
+
+
 # committed webapps.lua would carry keybinds for apps the default set no
+
+
 
 # longer has, and would beat the generated one into every fresh home.
 
+
+
 rm -f "$PROJECT/config/hypr/webapps.lua"
+
+
 
 ok "source tree: $PROJECT"
 
+
+
 # Rebuild the profile every run: with KEEP_WORK=1 a file dropped from the
+
+
 
 # overlay (or from releng) would otherwise survive in work/profile/airootfs and
 
+
+
 # pacstrap later aborts with a "conflicting files" error. The bundled offline
+
+
 
 # repo lives inside the profile, so move it aside before wiping and put it back.
 
+
+
 OFFLINE_KEEP=
+
+
 
 if [[ -d "$OFFLINE" ]]; then
 
+
+
     OFFLINE_KEEP="$WORK/.offline-keep"
+
+
 
     rm -rf "$OFFLINE_KEEP"
 
+
+
     mv "$OFFLINE" "$OFFLINE_KEEP"
 
+
+
 fi
+
+
 
 wipe "$PROFILE"
 
+
+
 mkdir -p "$PROFILE"
+
+
 
 cp -a "$RELENG/." "$PROFILE/"
 
+
+
 if [[ -n "$OFFLINE_KEEP" ]]; then
+
+
 
     mkdir -p "$(dirname "$OFFLINE")"
 
+
+
     mv "$OFFLINE_KEEP" "$OFFLINE"
 
+
+
 fi
+
+
+
+
 
 
 
 # Silence the PC-speaker beep in the boot loader menus:
 
+
+
 #   - systemd-boot: "beep on" in loader.conf beeps on every menu entry
+
+
 
 #   - GRUB: the accessibility init tune (play ...) beeps through the PC speaker
 
+
+
 info "disabling boot beep in loader.conf / grub.cfg"
+
+
 
 if [[ -f "$PROFILE/efiboot/loader/loader.conf" ]]; then
 
+
+
     if grep -q '^[[:space:]]*beep[[:space:]]' "$PROFILE/efiboot/loader/loader.conf"; then
+
+
 
         sed -i 's/^[[:space:]]*beep[[:space:]].*/beep off/' "$PROFILE/efiboot/loader/loader.conf"
 
+
+
     else
+
+
 
         printf 'beep off\n' >> "$PROFILE/efiboot/loader/loader.conf"
 
+
+
     fi
+
+
 
 fi
 
+
+
 for g in "$PROFILE/grub/grub.cfg" "$PROFILE/grub/loopback.cfg"; do
+
+
 
     [[ -f "$g" ]] || continue
 
+
+
     sed -i '/^[[:space:]]*#[[:space:]]*GRUB init tune for accessibility[[:space:]]*$/d; /^[[:space:]]*play[[:space:]]/d' "$g"
 
+
+
 done
+
+
+
+
 
 
 
 # ------------------------------------------------------------- boot menus ---
 
+
+
 # The entries say Aequalyn, and each menu (systemd-boot, GRUB, syslinux) gets a
+
+
 
 # safe graphics entry right under the default one: the discrete GPU's drivers
 
+
+
 # are kept from loading, so the integrated GPU drives the screen (laptops with
+
+
 
 # hybrid graphics, or a desktop card that will not start the desktop).
 
+
+
 SAFE_GFX="module_blacklist=nouveau,nvidia,nvidia_drm,nvidia_modeset,nvidia_uvm"
+
+
 
 info "naming the boot entries and adding a safe graphics entry"
 
+
+
 python3 - "$PROFILE" "$SAFE_GFX" <<'PY'
+
+
 
 import pathlib, re, sys
 
+
+
 prof, safe = pathlib.Path(sys.argv[1]), sys.argv[2]
+
+
 
 NAME, SAFE = "Aequalyn live", "Aequalyn live, safe graphics"
 
 
 
+
+
+
+
 def rename(s):
+
+
 
     return s.replace("Arch Linux install medium", NAME)
 
 
 
+
+
+
+
 # systemd-boot: one file per entry; sorted by sort-key, so 01s lands after 01
+
+
 
 entries = prof / "efiboot/loader/entries"
 
+
+
 for f in entries.glob("*.conf"):
+
+
 
     f.write_text(rename(f.read_text()))
 
+
+
 main = entries / "01-archiso-linux.conf"
+
+
 
 if main.exists():
 
+
+
     s = main.read_text()
+
+
 
     s = s.replace("title    " + NAME + " (", "title    " + SAFE + " (", 1)
 
+
+
     s = re.sub(r"^sort-key .*$", "sort-key 01s", s, count=1, flags=re.M)
 
+
+
     s = re.sub(r"^(options .*)$", r"\1 " + safe, s, count=1, flags=re.M)
+
+
 
     (entries / "01s-archiso-linux-safe-graphics.conf").write_text(s)
 
 
 
+
+
+
+
 # GRUB (grub.cfg for the ISO, loopback.cfg for booting the ISO file from a disk)
+
+
 
 for name in ("grub/grub.cfg", "grub/loopback.cfg"):
 
+
+
     f = prof / name
+
+
 
     if not f.exists():
 
+
+
         continue
+
+
 
     s = rename(f.read_text())
 
+
+
     m = re.search(r"^menuentry \"" + re.escape(NAME) + r" \(.*?--id 'archlinux' \{\n.*?^\}\n", s, re.S | re.M)
+
+
 
     if m:
 
+
+
         e = m.group(0).replace('"' + NAME + " (", '"' + SAFE + " (", 1)
+
+
 
         e = e.replace("--id 'archlinux'", "--id 'archlinux-safe-graphics'", 1)
 
+
+
         e = re.sub(r"^(\s*linux .*)$", r"\1 " + safe, e, count=1, flags=re.M)
+
+
 
         s = s[:m.end()] + "\n" + e + s[m.end():]
 
+
+
     f.write_text(s)
+
+
+
+
 
 
 
 # syslinux (BIOS)
 
+
+
 for f in (prof / "syslinux").glob("*.cfg"):
+
+
 
     s = rename(f.read_text()).replace("MENU TITLE Arch Linux", "MENU TITLE Aequalyn")
 
+
+
     if f.name == "archiso_sys-linux.cfg":
+
+
 
         s = s.replace("Arch Linux", "Aequalyn")
 
+
+
         s += ("\n# Integrated GPU only\nLABEL aequalynsafe\nTEXT HELP\n"
+
+
 
               "Boot Aequalyn live with the discrete GPU's drivers kept from loading,\n"
 
+
+
               "so the integrated GPU drives the screen.\nENDTEXT\n"
+
+
 
               "MENU LABEL " + SAFE + " (%ARCH%, BIOS)\n"
 
+
+
               "LINUX /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux\n"
+
+
 
               "INITRD /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img\n"
 
+
+
               "APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% %KERNEL_PARAMS% " + safe + "\n")
+
+
 
     f.write_text(s)
 
+
+
 PY
+
+
 
 grep -q 'archlinux-safe-graphics' "$PROFILE/grub/grub.cfg" \
 
+
+
     && [[ -f "$PROFILE/efiboot/loader/entries/01s-archiso-linux-safe-graphics.conf" ]] \
+
+
 
     || warn "the safe graphics entry could not be added to every boot menu"
 
 
 
+
+
+
+
 # ---------------------------------------------------------------- plymouth ---
+
+
 
 # Boot splash. The theme lives in the core repo's plymouth/ directory. Live
 
+
+
 # media never unlocks a LUKS volume, so there is no passphrase answer to start
+
+
 
 # the bar from: switch the theme to live mode (bar runs with the splash) and
 
+
+
 # use a duration closer to the ISO's own boot than an installed system's.
+
+
 
 THEME_SRC="$PROJECT/plymouth/aequalyn"
 
+
+
 THEME_DST="$PROFILE/airootfs/usr/share/plymouth/themes/aequalyn"
+
+
 
 if [[ -d "$THEME_SRC" ]]; then
 
+
+
     install -d -m 0755 "$THEME_DST"
+
+
 
     cp -a "$THEME_SRC/." "$THEME_DST/"
 
+
+
     sed -i -e 's/^START_BAR_ON_SPLASH = 0;/START_BAR_ON_SPLASH = 1;/' \
+
+
 
              -e 's/^BOOT_SECONDS = .*/BOOT_SECONDS = 12.0;/' "$THEME_DST/aequalyn.script"
 
+
+
     ok "Plymouth theme staged for the live ISO (bar from splash, 12 s)"
+
+
 
 else
 
+
+
     warn "no plymouth/aequalyn theme in the core checkout; the ISO will boot without a splash"
 
+
+
 fi
+
+
+
+
 
 
 
 # The splash must be in the initramfs, which archiso builds from the profile's
 
+
+
 # mkinitcpio hooks. Start plymouth right after udev, before archiso mounts the
+
+
 
 # image, so the archiso console output never appears.
 
+
+
 MKI_CONF="$PROFILE/airootfs/etc/mkinitcpio.conf.d/archiso.conf"
+
+
 
 if [[ -f "$MKI_CONF" ]] && ! grep -q 'plymouth' "$MKI_CONF"; then
 
+
+
     sed -i 's/^\(HOOKS=(base udev\) /\1 plymouth /' "$MKI_CONF"
+
+
 
     grep -q '^HOOKS=(base udev plymouth' "$MKI_CONF" \
 
+
+
         || warn "could not add the plymouth hook to $MKI_CONF"
 
+
+
 fi
+
+
+
+
 
 
 
 # quiet + splash for every boot entry: mkarchiso substitutes %KERNEL_PARAMS%
 
+
+
 # from kernel_params_<arch> in profiledef.sh (syslinux, grub and systemd-boot).
+
+
 
 if ! grep -q '^kernel_params_x86_64=' "$PROFILE/profiledef.sh"; then
 
+
+
     if grep -q '^kernel_params_aarch64=' "$PROFILE/profiledef.sh"; then
+
+
 
         sed -i '/^kernel_params_aarch64=/i kernel_params_x86_64="quiet splash"' "$PROFILE/profiledef.sh"
 
+
+
     else
+
+
 
         printf 'kernel_params_x86_64="quiet splash"\n' >> "$PROFILE/profiledef.sh"
 
+
+
     fi
 
+
+
 fi
+
+
+
+
 
 
 
 # ---------------------------------------------------------------- overlay ----
 
+
+
 info "overlaying Aequalyn airootfs files"
+
+
 
 cp -a "$SCRIPT_DIR/overlay/airootfs/." "$PROFILE/airootfs/"
 
+
+
 # The core's commands ship root-owned in /usr/local/bin, always fresh from the
+
+
 
 # assembled tree: the root gate's pinned actions point here (never a
 
+
+
 # user-writable path), the live session finds aequalyn-update/detect/store/...
+
+
 
 # without waiting for a first update, and the overlay no longer needs its own
 
+
+
 # copies of them to drift stale. ISO-only scripts (aequalyn-install,
+
+
 
 # -live-session, -live-update, -repair) are not in bin/ and stay as the
 
+
+
 # overlay ships them.
+
+
 
 info "shipping the core's bin/ into /usr/local/bin (fresh from the assembled tree)"
 
+
+
 for f in "$PROJECT/bin/"aequalyn-*; do
+
+
 
     [[ -f "$f" ]] || continue
 
+
+
     cp "$f" "$PROFILE/airootfs/usr/local/bin/$(basename "$f")"
+
+
 
     chmod 755 "$PROFILE/airootfs/usr/local/bin/$(basename "$f")"
 
+
+
 done
+
+
+
+
 
 
 
 # The desktop the ISO starts with, for the live session and for installs made
 
+
+
 # from it (both take config/aequalyn/settings.json from this tree): the Islands
+
+
 
 # ensemble, three soft islands for the bar and docks that wear the same look
 
+
+
 # (docks follow the bar unless told otherwise), a short list of bar widgets,
+
+
 
 # and the theme's own wallpapers as the rotation. Every part stays changeable
 
+
+
 # in the control center.
+
+
 
 info "setting the ISO's desktop defaults (Islands bar and docks)"
 
+
+
 python3 - "$PROJECT/config/aequalyn/settings.json" <<'PY'
+
+
 
 import json, sys
 
+
+
 p = sys.argv[1]
+
+
 
 d = json.load(open(p))
 
+
+
 # BarLooks.applyLook(<core default>, "archipelago"), as the Islands ensemble stores it
+
+
 
 d["barStyle"] = {
 
+
+
     "enabled": True, "chips": True, "shape": "islands", "ends": "rounded", "radius": 12,
+
+
 
     "pointing": "right", "pointingBar": "right", "flatSide": "none",
 
+
+
     "surface": "filled", "fill": "solid", "gradientTo": "accent", "gradientAcross": False,
+
+
 
     "pattern": "none", "depth": "flat", "lines": "solid", "border": "subtle", "borderWidth": 1,
 
+
+
     "railSide": "windows", "outlineGradient": True, "outlineGradientTo": "spectrum",
+
+
 
     "ornaments": "none", "shadow": "soft", "shadowColor": "dark",
 
+
+
     "attach": False, "concave": True, "regions": "all",
+
+
 
     "edgeGap": 6, "floatGap": 0, "sideGap": 10, "padding": 8, "pillRoom": 0, "pillGap": 2,
 
+
+
     "mergeGap": 4, "fullExtra": 0, "fullInset": 8, "slim": 0, "pillFit": False,
+
+
 
     "centerMin": 0, "mirrorSides": False, "hover": "fill", "hoverColor": "text",
 
+
+
     "separators": "none", "dividers": False, "edgeLine": False, "colorMode": "theme",
+
+
 
     "centerStyle": "same", "opacity": 100,
 
+
+
     "customBg": "#141414", "customFg": "#e0e0e0", "accentColor": "#ff6a1f",
+
+
 
 }
 
+
+
 # The shell keeps every widget in the arranger (it appends any missing one), so the
+
+
 
 # short bar comes from the widgets' show switches; the hidden ones wait at the end.
 
+
+
 a = d.setdefault("appearance", {})
+
+
 
 hidden = {"layouts": "showLayouts", "atelier": "showAtelier", "title": "showTitle",
 
+
+
           "brightness": "showBrightness", "cpu": "showCpu", "temperature": "showTemperature",
+
+
 
           "caffeine": "showCaffeine", "screenrecorder": "showScreenRecorder",
 
+
+
           "screenshot": "showScreenshot", "clipscape": "showClipscape"}
+
+
 
 for key in hidden.values():
 
+
+
     a[key] = False
 
-a["barLeft"] = ["appsmenu", "workspaces"]
+# Browser theme sync is part of the desktop: every theme change publishes the
+
+# bar's base colour to the installed Chromium-family policies. The gate still
+
+# asks for admin permission (each colour change needs sudo), but the helper is
+
+# no longer a no-op waiting for an opt-in nobody knows about.
+
+a["themeBrowser"] = Truea["barLeft"] = ["appsmenu", "workspaces"]
+
+
 
 a["barCenter"] = ["clock", "media"]
 
+
+
 a["barRight"] = ["network", "bluetooth", "volume", "battery", "tray",
+
+
 
                  "plume", "altscape", "settingsbutton", "power"] + list(hidden)
 
+
+
 d.setdefault("wallpaper", {})["mode"] = "theme"
+
+
 
 open(p, "w").write(json.dumps(d, indent=2) + "\n")
 
+
+
 PY
+
+
+
+
 
 
 
 # /etc/skel -> /home/live/.config (mkarchiso copies skel for UID >= 1000 users)
 
+
+
 info "populating /etc/skel with the Aequalyn desktop"
+
+
 
 "$PROJECT/install.sh" --target "$SKEL" --skel
 
 
 
+
+
+
+
 # The live session's themes: /usr/share/aequalyn/themes is where aequalyn-themes
+
+
 
 # looks first, so point it at the copy the installer ships in /opt/aequalyn
 
+
+
 # (one copy in the image). The live user starts on Aequalyn with its night
+
+
 
 # wallpaper; the path is a system one, so it holds before the home exists.
 
+
+
 mkdir -p "$PROFILE/airootfs/usr/share/aequalyn"
+
+
 
 ln -sfn /opt/aequalyn/themes "$PROFILE/airootfs/usr/share/aequalyn/themes"
 
+
+
 printf 'theme:aequalyn' > "$SKEL/.config/quickshell/theme.conf"
+
+
 
 printf '%s' /usr/share/aequalyn/themes/aequalyn/backgrounds/1-night-aequalyn.jpg \
 
+
+
     > "$SKEL/.config/quickshell/wallpaper.conf"
+
+
 
 mkdir -p "$SKEL/.config/aequalyn/current"
 
+
+
 ln -sfn /usr/share/aequalyn/themes/aequalyn "$SKEL/.config/aequalyn/current/theme"
 
+
+
 [[ -f "$PROJECT/themes/aequalyn/backgrounds/1-night-aequalyn.jpg" ]] \
+
+
 
     || abort "the Aequalyn night wallpaper is missing from the theme bundle"
 
 
 
+
+
+
+
 # The core settings.json pins a generic dock list. On the live ISO pin the
+
+
 
 # apps that are actually installed, plus the "Install Aequalyn" launcher.
 
+
+
 # Each id gets ".desktop" appended by the shell's first-run dock migration;
+
+
 
 # the three app icons come from their packages' hicolor icons, the installer
 
+
+
 # uses the Aequalyn mark shipped in the overlay, and the FM's entry (written
+
+
 
 # by session-start the moment the live user logs in) carries its own icon.
 
+
+
 info "pinning the live dock apps"
+
+
 
 python3 - "$SKEL/.config/aequalyn/settings.json" <<'PY'
 
+
+
 import json, sys
+
+
 
 p = sys.argv[1]
 
+
+
 d = json.load(open(p))
+
+
 
 d.setdefault("dock", {})["pinned"] = [
 
+
+
     "kitty", "chromium", "aequalyn.fm", "aequalyn-install"
+
+
 
 ]
 
+
+
 open(p, "w").write(json.dumps(d, indent=2) + "\n")
 
+
+
 PY
+
+
+
+
 
 
 
 # skel must be root-owned; mkarchiso chowns it to the live user
 
+
+
 chown -R 0:0 "$SKEL"
+
+
+
+
 
 
 
 # Whole source tree for the installer. Copy an explicit whitelist: the profile
 
+
+
 # keeps git metadata and build leftovers out of the image.
+
+
 
 info "copying Aequalyn source into /opt/aequalyn"
 
+
+
 mkdir -p "$PROFILE/airootfs/opt/aequalyn"
+
+
 
 for item in shell config bin assets packages installer themes plymouth migrations docs install.sh VERSION README.md; do
 
+
+
     [[ -e "$PROJECT/$item" ]] && cp -a "$PROJECT/$item" "$PROFILE/airootfs/opt/aequalyn/"
+
+
 
 done
 
+
+
 chmod 755 "$PROFILE/airootfs/usr/local/bin/"* "$PROFILE/airootfs/opt/aequalyn/install.sh" \
+
+
 
           "$PROFILE/airootfs/opt/aequalyn/bin/"* 2>/dev/null || true
 
 
 
+
+
+
+
 # ---------------------------------------------------------------- packages ---
+
+
 
 read_list() { # read_list <file>
 
+
+
     [[ -f "$1" ]] || return 0
 
+
+
     sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$1" | grep -v '^$' || true
+
+
 
 }
 
 
 
+
+
+
+
 ISO_PKGS=()
+
+
 
 ISO_PKGS+=($(read_list "$PROJECT/packages/desktop.packages"))
 
+
+
 ISO_PKGS+=($(read_list "$PROJECT/packages/offline-extra.packages"))
+
+
 
 # Tools needed by the live environment / installer. sddm replaces the tty1
 
+
+
 # getty autologin; it pulls in xorg-server itself for its greeter, so there is
+
+
 
 # no need to list xorg explicitly.
 
+
+
 ISO_PKGS+=(sddm arch-install-scripts limine efibootmgr parted gptfdisk openssl \
+
+
 
            git gum dialog jq python dbus snapper snap-pac zram-generator mkinitcpio \
 
+
+
            plymouth)
+
+
 
 # Networking for the live session: the shell bar reads the link state through
 
+
+
 # nmcli, and the ISO should be online out of the box for updates and online
+
+
 
 # installs. wpa_supplicant is NetworkManager's default backend for WPA networks.
 
+
+
 ISO_PKGS+=(networkmanager wpa_supplicant)
+
+
 
 for p in "${ISO_PKGS[@]}"; do
 
+
+
     # A second kernel would need a second archiso initramfs; keep the live ISO
+
+
 
     # on one kernel. LTS still ships in the offline repo for target installs.
 
+
+
     [[ "$p" == linux-lts* ]] && continue
+
+
 
     # DKMS modules would be built against headers the live system does not
 
+
+
     # have; the ISO uses releng's prebuilt broadcom-wl, installs get the DKMS one.
+
+
 
     [[ "$p" == *-dkms ]] && continue
 
+
+
     grep -qx -- "$p" "$PROFILE/packages.x86_64" 2>/dev/null || echo "$p" >> "$PROFILE/packages.x86_64"
 
+
+
 done
+
+
 
 ok "ISO package list: $(wc -l < "$PROFILE/packages.x86_64") entries"
 
 
 
+
+
+
+
 # Enable only the [multilib] section in the build config (optional profiles).
+
+
 
 python3 - "$PROFILE/pacman.conf" "$MIRRORLIST" <<'PY'
 
+
+
 import sys, pathlib, re
+
+
 
 p = pathlib.Path(sys.argv[1]); s = p.read_text()
 
+
+
 s = s.replace('#[multilib]\n#Include = /etc/pacman.d/mirrorlist',
+
+
 
               '[multilib]\nInclude = /etc/pacman.d/mirrorlist')
 
+
+
 # build from the build's own mirrors, not the host's
+
+
 
 s = s.replace('Include = /etc/pacman.d/mirrorlist', 'Include = ' + sys.argv[2])
 
+
+
 p.write_text(s)
 
+
+
 PY
+
+
+
+
 
 
 
 # ------------------------------------------------- Aequalyn's own packages ---
 
+
+
 # Packages built for Aequalyn and kept prebuilt in aequalyn-pkgs/aur-cache
+
+
 
 # (local.packages: mpvpaper, ddwriter, nudu) are not in the Arch repositories:
 
+
+
 # the live system installs them from a local repository made here. Installs get
+
+
 
 # them from the offline repository below, which takes the whole cache.
 
+
+
 LOCAL_REPO="$WORK/local-repo"
+
+
 
 mapfile -t LOCAL_PKGS < <(read_list "$PROJECT/packages/local.packages")
 
+
+
 if (( ${#LOCAL_PKGS[@]} )); then
+
+
 
     info "adding Aequalyn's own packages to the live system: ${LOCAL_PKGS[*]}"
 
+
+
     rm -rf "$LOCAL_REPO"; mkdir -p "$LOCAL_REPO"
+
+
 
     for p in "${LOCAL_PKGS[@]}"; do
 
+
+
         f=$(compgen -G "$PROJECT/packages/aur-cache/$p-[0-9]*.pkg.tar.zst" | sort -V | tail -n1 || true)
+
+
 
         [[ -n "$f" ]] || abort "$p (local.packages) is not built in aequalyn-pkgs/aur-cache"
 
+
+
         cp "$f" "$LOCAL_REPO/"
+
+
 
         grep -qx -- "$p" "$PROFILE/packages.x86_64" || echo "$p" >> "$PROFILE/packages.x86_64"
 
+
+
     done
+
+
 
     ( cd "$LOCAL_REPO" && repo-add -q aequalyn-local.db.tar.gz ./*.pkg.tar.zst )
 
+
+
     printf '\n[aequalyn-local]\nSigLevel = Never\nServer = file://%s\n' "$LOCAL_REPO" >> "$PROFILE/pacman.conf"
+
+
 
     ok "local repository: $(find "$LOCAL_REPO" -name '*.pkg.tar.zst' | wc -l) packages"
 
+
+
 fi
+
+
+
+
 
 
 
 # ------------------------------------------------------- offline repository ---
 
+
+
 OFFLINE_PKGS=()
+
+
 
 OFFLINE_PKGS+=($(read_list "$PROJECT/packages/base.packages"))
 
+
+
 OFFLINE_PKGS+=($(read_list "$PROJECT/packages/desktop.packages"))
+
+
 
 OFFLINE_PKGS+=($(read_list "$PROJECT/packages/profiles/minimal.packages"))
 
+
+
 OFFLINE_PKGS+=($(read_list "$PROJECT/packages/offline-extra.packages"))
+
+
 
 # The boot splash the installer applies; keep it available for offline installs.
 
+
+
 OFFLINE_PKGS+=(plymouth)
 
+
+
 mapfile -t OFFLINE_PKGS < <(printf '%s\n' "${OFFLINE_PKGS[@]}" | sort -u)
+
+
 
 ok "offline repo: ${#OFFLINE_PKGS[@]} packages (+ dependencies)"
 
 
 
+
+
+
+
 DL_CONF="$WORK/pacman-dl.conf"
+
+
 
 cat > "$DL_CONF" <<'PACDL'
 
+
+
 [options]
+
+
 
 HoldPkg = pacman glibc
 
+
+
 Architecture = auto
+
+
 
 CheckSpace
 
+
+
 ParallelDownloads = 8
+
+
 
 DownloadUser = root
 
+
+
 SigLevel = Never
+
+
 
 LocalFileSigLevel = Optional
 
 
 
+
+
+
+
 [core]
 
+
+
 Include = /etc/pacman.d/mirrorlist
+
+
 
 [extra]
 
+
+
 Include = /etc/pacman.d/mirrorlist
+
+
 
 [multilib]
 
+
+
 Include = /etc/pacman.d/mirrorlist
 
+
+
 PACDL
+
+
 
 sed -i "s|Include = /etc/pacman.d/mirrorlist|Include = $MIRRORLIST|" "$DL_CONF"
 
 
 
+
+
+
+
 if [[ "${SKIP_DOWNLOAD:-0}" == "1" && -f "$OFFLINE/offline.db" ]]; then
+
+
 
     ok "reusing existing offline repo (SKIP_DOWNLOAD=1)"
 
+
+
 else
+
+
 
     TMP_DB="$WORK/tmp-db"
 
+
+
     mkdir -p "$TMP_DB"
+
+
 
     info "syncing package databases into a temporary db"
 
+
+
     pacman -Sy --config "$DL_CONF" --dbpath "$TMP_DB" --cachedir "$CACHE" --noconfirm
+
+
 
     info "downloading packages + all dependencies (this is the slow part)"
 
+
+
     # --noconfirm takes every default; defaults are also fed on stdin for any
+
+
 
     # prompt it misses. Through process substitution, not a pipe: `yes` dies of
 
+
+
     # SIGPIPE once pacman exits, and in a pipeline pipefail would turn that
+
+
 
     # into a failed build (a subshell's own `set +o pipefail` does not help).
 
+
+
     pacman -Sw --config "$DL_CONF" --dbpath "$TMP_DB" --cachedir "$CACHE" --noconfirm \
 
+
+
            "${OFFLINE_PKGS[@]}" < <(yes "")
+
+
 
     rm -rf "$TMP_DB"
 
 
 
+
+
+
+
     info "creating offline repository"
+
+
 
     # hard links, not copies: the cache and the repository are on the same disk,
 
+
+
     # and a copy would hold every package twice (about 3 GB)
+
+
 
     find "$CACHE" -name '*.pkg.tar.zst' -exec cp -nl {} "$OFFLINE/" \;
 
+
+
     COUNT=$(find "$OFFLINE" -name '*.pkg.tar.zst' | wc -l)
+
+
 
     [[ "$COUNT" -gt 0 ]] || abort "no packages downloaded"
 
+
+
     ( cd "$OFFLINE" && repo-add offline.db.tar.gz ./*.pkg.tar.zst )
+
+
 
     ok "offline repo: $COUNT packages"
 
+
+
 fi
+
+
+
+
 
 
 
 # -------------------------------------------------------- AUR package cache ---
 
+
+
 # Boot-critical AUR packages (Limine snapshot stack) cannot be built inside
+
+
 
 # pacstrap: they are built on the host once and cached here, then added to the
 
+
+
 # offline repo so both the live ISO and installed systems have them.
+
+
 
 AUR_CACHE="$PROJECT/packages/aur-cache"
 
+
+
 if compgen -G "$AUR_CACHE/*.pkg.tar.zst" >/dev/null; then
+
+
 
     info "adding cached AUR packages to the offline repo"
 
+
+
     cp -n "$AUR_CACHE/"*.pkg.tar.zst "$OFFLINE/"
+
+
 
     ( cd "$OFFLINE" && repo-add offline.db.tar.gz ./*.pkg.tar.zst >/dev/null )
 
+
+
     ok "AUR cache baked: $(find "$AUR_CACHE" -name '*.pkg.tar.zst' | wc -l) packages"
+
+
 
 else
 
+
+
     warn "no packages/aur-cache/*.pkg.tar.zst: snapshot support will be online-only"
 
+
+
 fi
+
+
+
+
 
 
 
 # ---------------------------------------------------------------- metadata ---
 
+
+
 python3 - "$PROFILE/profiledef.sh" <<'PY'
+
+
 
 import sys, pathlib
 
+
+
 p = pathlib.Path(sys.argv[1]); s = p.read_text()
+
+
 
 s = s.replace('iso_name="archlinux"', 'iso_name="aequalyn"')
 
+
+
 s = s.replace('iso_label="ARCH_$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y%m)"',
+
+
 
               'iso_label="AEQUALYN_$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y%m)"')
 
+
+
 s = s.replace('iso_publisher="Arch Linux <https://archlinux.org>"',
+
+
 
               'iso_publisher="Aequalyn <https://github.com/Aequalyn>"')
 
+
+
 s = s.replace('iso_application="Arch Linux Live/Rescue DVD"',
+
+
 
               'iso_application="Aequalyn Live / Installer"')
 
+
+
 extra = '''  ["/usr/local/bin/aequalyn-live-session"]="0:0:755"
+
+
 
   ["/usr/local/bin/aequalyn-install"]="0:0:755"
 
+
+
   ["/usr/local/bin/aequalyn-update"]="0:0:755"
+
+
 
   ["/usr/local/bin/aequalyn-detect"]="0:0:755"
 
+
+
   ["/usr/local/bin/aequalyn-repair"]="0:0:755"
+
+
 
   ["/usr/local/bin/aequalyn-live-update"]="0:0:755"
 
+
+
   ["/usr/local/bin/aequalyn-provision-user"]="0:0:755"
+
+
 
   ["/usr/local/bin/aequalyn-ai-tool"]="0:0:755"
 
+
+
   ["/etc/sddm.conf.d/autologin.conf"]="0:0:644"
+
+
 
   ["/usr/share/wayland-sessions/aequalyn.desktop"]="0:0:644"
 
+
+
   ["/usr/share/applications/aequalyn-install.desktop"]="0:0:644"
+
+
 
   ["/usr/share/icons/hicolor/scalable/apps/aequalyn-mark-dark.svg"]="0:0:644"
 
+
+
   ["/etc/sudoers.d/live"]="0:0:440"
+
+
 
   ["/etc/profile.d/aequalyn.sh"]="0:0:644"
 
+
+
   ["/etc/skel/.local/bin/"]="0:0:755"
+
+
 
   ["/opt/aequalyn/install.sh"]="0:0:755"
 
+
+
   ["/opt/aequalyn/bin/"]="0:0:755"
+
+
 
   ["/opt/aequalyn/installer/"]="0:0:755"
 
+
+
 '''
+
+
 
 s = s.replace('file_permissions=(\n', 'file_permissions=(\n' + extra)
 
+
+
 p.write_text(s)
+
+
 
 PY
 
+
+
 # releng's shadow permission stays 400; ensure our new scripts are executable
+
+
 
 ok "profile metadata updated"
 
 
 
+
+
+
+
 # ---------------------------------------------------------------- build ------
+
+
 
 info "running mkarchiso (this can take a while)"
 
+
+
 [[ -d "$WORK/mkarchiso-work" ]] && wipe "$WORK/mkarchiso-work"
+
+
 
 rm -f "$OUT"/*.iso 2>/dev/null || true
 
+
+
 if ! mkarchiso -v -w "$WORK/mkarchiso-work" -o "$OUT" "$PROFILE"; then
+
+
 
     unmount_work
 
+
+
     abort "mkarchiso failed; leftover mounts under work/ were released. Run again with KEEP_WORK=1 SKIP_DOWNLOAD=1 to skip the download"
 
+
+
 fi
+
+
+
+
 
 
 
 ISO=$(ls -1 "$OUT"/*.iso 2>/dev/null | head -1 || true)
 
+
+
 [[ -n "$ISO" ]] || abort "no ISO produced in $OUT"
+
+
 
 mkdir -p "$ISO_REPO/release"
 
+
+
 DEST="$ISO_REPO/release/$(basename "$ISO")"
+
+
 
 # moved, not copied: a second copy is another 6.5 GB
 
+
+
 mv -f "$ISO" "$DEST"
+
+
 
 ok "ISO created: $DEST"
 
+
+
 # mkarchiso's tree of the live system is not needed once the ISO exists
+
+
 
 if [[ "${KEEP_WORK:-0}" != "1" ]]; then
 
+
+
     wipe "$WORK/mkarchiso-work"
+
+
 
     info "freed mkarchiso's work tree (KEEP_WORK=1 keeps it)"
 
+
+
 fi
 
+
+
 ls -lh "$DEST"
+
+
 
 info "sha256: $(sha256sum "$DEST" | cut -d' ' -f1)"
