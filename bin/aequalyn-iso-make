@@ -341,6 +341,11 @@ hidden = {"layouts": "showLayouts", "atelier": "showAtelier", "title": "showTitl
           "screenshot": "showScreenshot", "clipscape": "showClipscape"}
 for key in hidden.values():
     a[key] = False
+# Browser theme sync is part of the desktop: every theme change publishes the
+# bar's base colour to the installed Chromium-family policies. The gate still
+# asks for admin permission (each colour change needs sudo), but the helper is
+# no longer a no-op waiting for an opt-in nobody knows about.
+a["themeBrowser"] = True
 a["barLeft"] = ["appsmenu", "workspaces"]
 a["barCenter"] = ["clock", "media"]
 a["barRight"] = ["network", "bluetooth", "volume", "battery", "tray",
