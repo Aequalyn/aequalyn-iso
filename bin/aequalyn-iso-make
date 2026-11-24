@@ -89,6 +89,9 @@ SKIP_DOWNLOAD="${SKIP_DOWNLOAD:-0}"
 
 # ---------------------------------------------------------------- prereqs ---
 command -v mkarchiso >/dev/null || { info "installing archiso"; pacman -S --noconfirm archiso; }
+# the UEFI boot menu is GRUB's: mkarchiso builds it with the host's grub-mkstandalone
+command -v grub-mkstandalone >/dev/null || { info "installing grub"; pacman -S --noconfirm grub; }
+command -v mformat >/dev/null || { info "installing mtools"; pacman -S --noconfirm mtools; }
 command -v repo-add  >/dev/null || { info "installing pacman-contrib"; pacman -S --noconfirm pacman-contrib; }
 RELENG=/usr/share/archiso/configs/releng
 [[ -d "$RELENG" ]] || abort "releng profile missing ($RELENG)"
@@ -229,7 +232,7 @@ info "naming the boot entries and adding a safe graphics entry"
 python3 - "$PROFILE" "$SAFE_GFX" <<'PY'
 import pathlib, re, sys
 prof, safe = pathlib.Path(sys.argv[1]), sys.argv[2]
-NAME, SAFE = "Aequalyn live", "Aequalyn live, safe graphics"
+NAME, SAFE, SPEECH = "Aequalyn live", "Aequalyn live, safe graphics", "Aequalyn live, with speech"
 
 def rename(s):
     return s.replace("Arch Linux install medium", NAME)
@@ -258,6 +261,26 @@ for name in ("grub/grub.cfg", "grub/loopback.cfg"):
         e = e.replace("--id 'archlinux'", "--id 'archlinux-safe-graphics'", 1)
         e = re.sub(r"^(\s*linux .*)$", r"\1 " + safe, e, count=1, flags=re.M)
         s = s[:m.end()] + "\n" + e + s[m.end():]
+    # the themed menu: each entry's class names its card (boot/grub-theme/icons)
+    for ident, cls in (("archlinux", "aequalyn"), ("archlinux-safe-graphics", "aeqsafe"), ("archlinux-accessibility", "aeqspeech"),
+                       ("uefi-firmware", "aeqfirmware")):
+        s = re.sub(r"^(\s*menuentry (?:\"[^\"]*\"|'[^']*'))((?:(?!\bmenuentry\b)[^\n])*--id '" + ident + r"')", r"\1 --class " + cls + r"\2", s, flags=re.M)
+    for title, new, cls in (("Run Memtest86+ (RAM test)", "Memory test", "aeqmemory"), ("UEFI Shell", "EFI shell", "aeqshell"),
+                            ("System restart", "Restart", "aeqrestart"), ("System shutdown", "Power off", "aeqpower")):
+        s = re.sub(r"^(\s*menuentry) (['\"])" + re.escape(title) + r"\2", r"\1 '" + new + r"' --class " + cls, s, flags=re.M)
+    s = s.replace("'UEFI Firmware Settings'", "'Firmware settings'")
+    s = re.sub(r"(^menuentry 'Power off'.*?^\}\n)\n?(^menuentry 'Restart'.*?^\}\n)", r"\2\n\1", s, flags=re.M | re.S)
+    s = re.sub(r'"' + re.escape(NAME) + r' with speakup screen reader \(', '"' + SPEECH + " (", s)
+    if name == "grub/grub.cfg":
+        s = s.replace("""    terminal_input console
+    terminal_output console
+""", """    terminal_input console
+    terminal_output gfxterm
+    insmod gfxmenu
+    insmod png
+    set theme="/boot/grub/themes/aequalyn/theme.txt"
+    export theme
+""", 1).replace('set gfxmode="auto"', 'set gfxmode="1920x1080,1600x900,1366x768,1280x800,1280x720,1024x768,auto"', 1)
     f.write_text(s)
 
 # syslinux (BIOS)
@@ -265,18 +288,78 @@ for f in (prof / "syslinux").glob("*.cfg"):
     s = rename(f.read_text()).replace("MENU TITLE Arch Linux", "MENU TITLE Aequalyn")
     if f.name == "archiso_sys-linux.cfg":
         s = s.replace("Arch Linux", "Aequalyn")
-        s += ("\n# Integrated GPU only\nLABEL aequalynsafe\nTEXT HELP\n"
+        safe_entry = ("\n# Integrated GPU only\nLABEL aequalynsafe\nTEXT HELP\n"
               "Boot Aequalyn live with the discrete GPU's drivers kept from loading,\n"
               "so the integrated GPU drives the screen.\nENDTEXT\n"
               "MENU LABEL " + SAFE + " (%ARCH%, BIOS)\n"
               "LINUX /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux\n"
               "INITRD /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img\n"
               "APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% %KERNEL_PARAMS% " + safe + "\n")
+        # right under the default one, above the one with speech
+        at = s.find("LABEL archspeech")
+        at = s.rfind("\n\n", 0, at) if at > 0 else len(s)
+        s = s[:at] + "\n" + safe_entry + s[at:]
     f.write_text(s)
 PY
 grep -q 'archlinux-safe-graphics' "$PROFILE/grub/grub.cfg" \
-    && [[ -f "$PROFILE/efiboot/loader/entries/01s-archiso-linux-safe-graphics.conf" ]] \
     || warn "the safe graphics entry could not be added to every boot menu"
+
+# The menu's look (boot/, drawn by boot/make-theme.py). UEFI: GRUB, as systemd-boot has no
+# graphics; its text menu is what shows if the theme cannot load. BIOS: syslinux, a list
+# over a picture.
+info "dressing the boot menus"
+install -d -m 0755 "$PROFILE/grub/themes"
+cp -a "$SCRIPT_DIR/boot/grub-theme" "$PROFILE/grub/themes/aequalyn"
+install -m 0644 "$SCRIPT_DIR/boot/syslinux/splash.png" "$PROFILE/syslinux/splash.png"
+python3 - "$PROFILE" <<'PY'
+import pathlib, re, sys
+prof = pathlib.Path(sys.argv[1])
+f = prof / "profiledef.sh"
+s = f.read_text()
+s, n = re.subn(r"'uefi(?:-x64)?\.systemd-boot(?:\.esp)?'", "'uefi.grub'", s, count=1)
+s = re.sub(r"\s*'uefi[^']*\.systemd-boot[^']*'", "", s)
+if n == 0 and "'uefi.grub'" not in s:
+    sys.exit("profiledef.sh has no UEFI boot mode to replace")
+f.write_text(s)
+h = prof / "syslinux/archiso_head.cfg"
+if h.exists():
+    s = h.read_text()
+    keep = [l for l in s.splitlines() if not re.match(r"MENU (WIDTH|MARGIN|ROWS|VSHIFT|HSHIFT|TABMSGROW|CMDLINEROW|HELPMSGROW|HELPMSGENDROW|COLOR|RESOLUTION|TITLE)\b", l)]
+    look = """MENU RESOLUTION 1024 768
+MENU TITLE
+MENU WIDTH 64
+MENU MARGIN 2
+MENU ROWS 9
+MENU HSHIFT 32
+MENU VSHIFT 13
+MENU TABMSGROW 30
+MENU CMDLINEROW 30
+MENU HELPMSGROW 33
+MENU HELPMSGENDROW 40
+MENU COLOR border       30;44   #00000000 #00000000 none
+MENU COLOR title        1;36;44 #00000000 #00000000 none
+MENU COLOR sel          7;37;40 #ffeef4f3 #ff1b3a38 none
+MENU COLOR unsel        37;44   #ffb9c6c4 #00000000 none
+MENU COLOR hotsel       7;37;40 #ff4fc3b3 #ff1b3a38 none
+MENU COLOR hotkey       37;44   #ff4fc3b3 #00000000 none
+MENU COLOR help         37;40   #ff8b9a98 #00000000 none
+MENU COLOR timeout_msg  37;40   #ff7d8b8a #00000000 none
+MENU COLOR timeout      1;37;40 #ff4fc3b3 #00000000 none
+MENU COLOR msg07        37;40   #ff8b9a98 #00000000 none
+MENU COLOR tabmsg       31;40   #ff66736f #00000000 none""".splitlines()
+    at = next((i + 1 for i, l in enumerate(keep) if l.startswith("MENU BACKGROUND")), len(keep))
+    h.write_text("\n".join(keep[:at] + look + keep[at:]) + "\n")
+for name, pairs in (("archiso_tail.cfg", (("Boot existing OS", "Installed system"), ("Run Memtest86+ (RAM test)", "Memory test"),
+                     ("Hardware Information (HDT)", "Hardware info"), ("MENU LABEL Reboot", "MENU LABEL Restart"), ("MENU LABEL Power Off", "MENU LABEL Power off"))),
+                    ("archiso_sys-linux.cfg", (("Aequalyn live (%ARCH%, BIOS) with ^speech", "Aequalyn live, with ^speech"), ("(%ARCH%, BIOS)", "")))):
+    f = prof / "syslinux" / name
+    if f.exists():
+        s = f.read_text()
+        for a, b in pairs:
+            s = s.replace(a, b)
+        f.write_text(s)
+PY
+ok "boot menus dressed"
 
 # ---------------------------------------------------------------- plymouth ---
 # Boot splash. The theme lives in the core repo's plymouth/ directory. Live

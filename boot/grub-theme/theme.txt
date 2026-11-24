@@ -1,0 +1,59 @@
+# Aequalyn boot menu (drawn by boot/make-theme.py)
+title-text: ""
+desktop-image: "background.png"
+desktop-image-scale-method: "stretch"
+desktop-color: "#0c1113"
+terminal-font: "Unifont Regular 16"
+terminal-left: "10%"
+terminal-top: "10%"
+terminal-width: "80%"
+terminal-height: "80%"
+
++ image {
+    left = 50%-170
+    top = 7%
+    width = 340
+    height = 124
+    file = "logo.png"
+}
+
++ boot_menu {
+    left = 50%-357
+    top = 7%+144
+    width = 700
+    height = 93%-254
+    item_font = "Unifont Regular 16"
+    # an entry's own title would come after its card: there, in the card's colour
+    item_color = "#12181a"
+    selected_item_color = "#1b3a38"
+    item_height = 46
+    item_padding = 0
+    item_spacing = 32
+    item_icon_space = 0
+    icon_width = 610
+    icon_height = 46
+    item_pixmap_style = "item_*.png"
+    selected_item_pixmap_style = "select_*.png"
+    scrollbar = true
+    scrollbar_width = 4
+    scrollbar_thumb = "thumb_*.png"
+}
+
++ progress_bar {
+    id = "__timeout__"
+    left = 50%-150
+    top = 100%-96
+    width = 300
+    height = 28
+    show_text = false
+    bar_style = "bar_*.png"
+    highlight_style = "fill_*.png"
+}
+
++ image {
+    left = 50%-210
+    top = 100%-58
+    width = 420
+    height = 24
+    file = "keys.png"
+}

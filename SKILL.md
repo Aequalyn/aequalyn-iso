@@ -41,7 +41,7 @@ for the installer, bundles an offline package repository, and writes the ISO to 
 4. Source assembly: sibling checkout or shallow clone; copies whitelisted items; strips `.git`/`__pycache__`; drops generated lockscreen/webapp files.
 5. Releng base copied into `work/profile`; restores kept offline repo.
 6. Boot beep disabled in loader.conf/grub.cfg.
-7. Boot menus: renames to "Aequalyn live"; adds "safe graphics" entry (blacklists nouveau/nvidia) to systemd-boot, GRUB (incl. loopback), syslinux.
+7. Boot menus: renames to "Aequalyn live"; adds "safe graphics" entry (blacklists nouveau/nvidia) to GRUB (incl. loopback) and syslinux; UEFI boots GRUB with the theme in `boot/grub-theme`, BIOS syslinux over `boot/syslinux/splash.png` (both drawn by `boot/make-theme.py`).
 8. Plymouth staged (live mode, 12 s).
 9. Overlay `overlay/airootfs/` copied into profile; ships core `bin/aequalyn-*` into `/usr/local/bin`.
 10. Desktop defaults: mutates `config/aequalyn/settings.json` to "Islands" bar/docks look; hides many widgets.
