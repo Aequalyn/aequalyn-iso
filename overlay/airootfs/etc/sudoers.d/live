@@ -3,6 +3,9 @@
 # agent, and in the root gate's approval window. The live user is not in
 # wheel, so the rule is explicit: passworded, all commands, no exceptions.
 live ALL=(ALL) ALL
+# What a theme change does as root, without the password (as aequalyn-gate-rules has it on
+# an installed system).
+live ALL=(root) NOPASSWD: /usr/local/bin/aequalyn-browser-theme gate-publish, /usr/local/bin/aequalyn-browser-theme gate-clear, /usr/local/bin/aequalyn-sddm gate-apply
 # No sudo lecture for the live user: the gate's `sudo -S` (no tty, the
 # password on a pipe) meets the first-time lecture badly -- the read dies
 # with exit 1 and the installer never starts. The lecture is a nicety the
