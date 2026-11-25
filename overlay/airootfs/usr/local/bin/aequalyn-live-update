@@ -11,6 +11,8 @@
 #                                        repos without it fall back to main)
 #   AEQUALYN_GIT=https://github.com/you aequalyn-live-update   a fork
 set -euo pipefail
+# whatever mask this was started under: what it writes is for every user to read
+umask 022
 
 if [[ $EUID -ne 0 ]]; then
     # keep the desktop's session variables for the shell restart at the end

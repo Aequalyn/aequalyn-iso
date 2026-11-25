@@ -4,6 +4,8 @@
 # from custom airootfs files, so restore them here (file_permissions in
 # profiledef.sh cannot cover every generated file).
 set -e
+# whatever mask this was started under: what it writes is for every user to read
+umask 022
 
 # Live user helpers (aequalyn-session-start is exec'd by the Hyprland session).
 chmod 755 /etc/skel/.local/bin/* 2>/dev/null || true
@@ -121,6 +123,9 @@ for d in /var/lib/pacman /var/lib/pacman/local /var/lib/pacman/sync \
          /var/cache/pacman /var/cache/pacman/pkg; do
     [[ -d $d ]] && chmod 755 "$d" 2>/dev/null || true
 done
+# Its version file above all: pacman, run by a user who cannot read it, says the database is of
+# an incorrect version and ends with 255.
+[[ -f /var/lib/pacman/local/ALPM_DB_VERSION ]] && chmod 644 /var/lib/pacman/local/ALPM_DB_VERSION 2>/dev/null || true
 # Chromium-family browsers run as the desktop user and read their managed
 # policy from /etc/<browser>/policies/managed. A restrictive build umask can
 # leave /etc/opt and friends 0700: the 0644 color.json is then unreadable and

@@ -25,6 +25,8 @@
 #
 # Run as root:  sudo ./bin/aequalyn-iso-make [--local-source DIR]
 set -euo pipefail
+# whatever mask this was started under: what it writes is for every user to read
+umask 022
 # never stop silently: say which line failed
 trap 'echo -e "\033[0;31mABORT:\033[0m line $LINENO failed (exit $?): $BASH_COMMAND"' ERR
 
@@ -418,7 +420,7 @@ done
 # The desktop the ISO starts with, for the live session and for installs made
 # from it (both take config/aequalyn/settings.json from this tree): the Islands
 # ensemble, three soft islands for the bar and docks that wear the same look
-# (docks follow the bar unless told otherwise), a short list of bar widgets,
+# (docks follow the bar unless told otherwise),
 # and the theme's own wallpapers as the rotation. Every part stays changeable
 # in the control center.
 info "setting the ISO's desktop defaults (Islands bar and docks)"
@@ -442,24 +444,13 @@ d["barStyle"] = {
     "centerStyle": "same", "opacity": 100,
     "customBg": "#141414", "customFg": "#e0e0e0", "accentColor": "#ff6a1f",
 }
-# The shell keeps every widget in the arranger (it appends any missing one), so the
-# short bar comes from the widgets' show switches; the hidden ones wait at the end.
+# The bar has every widget, as the core's own settings place them.
 a = d.setdefault("appearance", {})
-hidden = {"layouts": "showLayouts", "atelier": "showAtelier", "title": "showTitle",
-          "brightness": "showBrightness", "cpu": "showCpu", "temperature": "showTemperature",
-          "caffeine": "showCaffeine", "screenrecorder": "showScreenRecorder",
-          "screenshot": "showScreenshot", "clipscape": "showClipscape"}
-for key in hidden.values():
-    a[key] = False
 # Browser theme sync is part of the desktop: every theme change publishes the
 # bar's base colour to the installed Chromium-family policies. The gate still
 # asks for admin permission (each colour change needs sudo), but the helper is
 # no longer a no-op waiting for an opt-in nobody knows about.
 a["themeBrowser"] = True
-a["barLeft"] = ["appsmenu", "workspaces"]
-a["barCenter"] = ["clock", "media"]
-a["barRight"] = ["network", "bluetooth", "volume", "battery", "tray",
-                 "plume", "altscape", "settingsbutton", "power"] + list(hidden)
 d.setdefault("wallpaper", {})["mode"] = "theme"
 open(p, "w").write(json.dumps(d, indent=2) + "\n")
 PY
