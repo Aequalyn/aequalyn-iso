@@ -570,7 +570,17 @@ if (( ${#LOCAL_PKGS[@]} )); then
         grep -qx -- "$p" "$PROFILE/packages.x86_64" || echo "$p" >> "$PROFILE/packages.x86_64"
     done
     ( cd "$LOCAL_REPO" && repo-add -q aequalyn-local.db.tar.gz ./*.pkg.tar.zst )
-    printf '\n[aequalyn-local]\nSigLevel = Never\nServer = file://%s\n' "$LOCAL_REPO" >> "$PROFILE/pacman.conf"
+    # before the Arch ones: pacman takes a package from the first repository that has it,
+    # and foot is in both (ours has live font changes)
+    python3 - "$PROFILE/pacman.conf" "$LOCAL_REPO" <<'PY'
+import sys, pathlib, re
+p = pathlib.Path(sys.argv[1]); s = p.read_text()
+local = f"[aequalyn-local]\nSigLevel = Never\nServer = file://{sys.argv[2]}\n\n"
+s, n = re.subn(r"^\[core\]", lambda m: local + m.group(0), s, count=1, flags=re.M)
+if n != 1:
+    sys.exit("no [core] in " + str(p))
+p.write_text(s)
+PY
     ok "local repository: $(find "$LOCAL_REPO" -name '*.pkg.tar.zst' | wc -l) packages"
 fi
 
@@ -627,7 +637,7 @@ else
     find "$CACHE" -name '*.pkg.tar.zst' -exec cp -nl {} "$OFFLINE/" \;
     COUNT=$(find "$OFFLINE" -name '*.pkg.tar.zst' | wc -l)
     [[ "$COUNT" -gt 0 ]] || abort "no packages downloaded"
-    ( cd "$OFFLINE" && repo-add offline.db.tar.gz ./*.pkg.tar.zst )
+    ( cd "$OFFLINE" && repo-add -p offline.db.tar.gz ./*.pkg.tar.zst )
     ok "offline repo: $COUNT packages"
 fi
 
@@ -639,7 +649,9 @@ AUR_CACHE="$PROJECT/packages/aur-cache"
 if compgen -G "$AUR_CACHE/*.pkg.tar.zst" >/dev/null; then
     info "adding cached AUR packages to the offline repo"
     cp -n "$AUR_CACHE/"*.pkg.tar.zst "$OFFLINE/"
-    ( cd "$OFFLINE" && repo-add offline.db.tar.gz ./*.pkg.tar.zst >/dev/null )
+    # -p: of two builds of a package (foot) the newer one is the repository's, whatever
+    # order their files come in
+    ( cd "$OFFLINE" && repo-add -p offline.db.tar.gz ./*.pkg.tar.zst >/dev/null )
     ok "AUR cache baked: $(find "$AUR_CACHE" -name '*.pkg.tar.zst' | wc -l) packages"
 else
     warn "no packages/aur-cache/*.pkg.tar.zst: snapshot support will be online-only"
