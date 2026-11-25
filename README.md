@@ -30,8 +30,14 @@ session, which starts a single guarded Hyprland + QuickShell desktop. A root
 rescue shell stays on tty2 (`Ctrl+Alt+F2`). Run `sudo aequalyn-install`
 (or `Super + I`) to install.
 
-The boot menu (UEFI and BIOS) has an **Aequalyn live, safe graphics** entry under
-the default one: it keeps the discrete GPU's drivers (nouveau, nvidia) from
+The boot menu wears the Aequalyn look, on UEFI (GRUB, `boot/grub-theme/`) and BIOS
+(syslinux, `boot/syslinux/`): the mark, the live desktop, safe graphics, speech, the installed
+system, memory test, EFI shell, firmware settings, restart and power off, as far as the
+machine has them. `boot/make-theme.py` draws its pictures.
+
+![The boot menu](docs/boot-menu.png)
+
+**Aequalyn live, safe graphics**, under the default entry, keeps the discrete GPU's drivers (nouveau, nvidia) from
 loading, so the integrated GPU drives the screen. Use it on laptops with hybrid
 graphics, or when a graphics card does not start the desktop.
 
