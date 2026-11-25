@@ -160,7 +160,7 @@ repo_dir() { # repo_dir <name> -> checkout path (sibling or fresh clone)
 info "assembling the source tree from $SOURCES"
 rm -rf "$PROJECT"; mkdir -p "$PROJECT/packages"
 CORE=$(repo_dir aequalyn)
-for item in bin config assets docs plymouth migrations install.sh VERSION README.md SKILL.md; do
+for item in bin config assets docs plymouth migrations vendor install.sh VERSION README.md SKILL.md; do
     [[ -e "$CORE/$item" ]] && cp -a "$CORE/$item" "$PROJECT/"
 done
 mkdir -p "$PROJECT/shell"; cp -a "$(repo_dir aequalyn-shell)/." "$PROJECT/shell/"
