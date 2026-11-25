@@ -503,7 +503,7 @@ chown -R 0:0 "$SKEL"
 # keeps git metadata and build leftovers out of the image.
 info "copying Aequalyn source into /opt/aequalyn"
 mkdir -p "$PROFILE/airootfs/opt/aequalyn"
-for item in shell config bin assets packages installer themes plymouth migrations docs install.sh VERSION README.md; do
+for item in shell config bin assets packages installer themes plymouth migrations vendor docs install.sh VERSION README.md; do
     [[ -e "$PROJECT/$item" ]] && cp -a "$PROJECT/$item" "$PROFILE/airootfs/opt/aequalyn/"
 done
 chmod 755 "$PROFILE/airootfs/usr/local/bin/"* "$PROFILE/airootfs/opt/aequalyn/install.sh" \
@@ -654,6 +654,30 @@ else
     warn "no packages/aur-cache/*.pkg.tar.zst: snapshot support will be online-only"
 fi
 
+# ---------------------------------------------------------------- titlebars ---
+# The titlebar plugin only loads into the Hyprland it was built for, so it is built here for
+# the one this ISO gets: in a small system of its own from the same repositories (the host may
+# have another Hyprland). An install with a newer one builds its own at the first login.
+info "building the titlebar plugin for the ISO's Hyprland"
+BARS_ROOT="$WORK/hyprbars-root"
+BARS_OUT="$PROFILE/airootfs/opt/aequalyn/vendor/hyprbars/built"
+[[ -d "$BARS_ROOT" ]] && wipe "$BARS_ROOT"
+mkdir -p "$BARS_ROOT" "$BARS_OUT"
+if pacstrap -C "$PROFILE/pacman.conf" -c -G -M "$BARS_ROOT" filesystem bash coreutils gawk gcc pkgconf hyprland lua \
+   && mkdir -p "$BARS_ROOT/opt/bars/bin" "$BARS_ROOT/opt/bars/vendor" \
+   && cp "$PROJECT/bin/aequalyn-hyprbars" "$BARS_ROOT/opt/bars/bin/" \
+   && cp -r "$PROJECT/vendor/hyprbars" "$BARS_ROOT/opt/bars/vendor/" \
+   && arch-chroot "$BARS_ROOT" env HOME=/root bash /opt/bars/bin/aequalyn-hyprbars build /opt/bars/out/hyprbars.so \
+   && cp "$BARS_ROOT/opt/bars/out/hyprbars.so" "$BARS_ROOT/opt/bars/out/hyprbars.abi" "$BARS_OUT/"; then
+    ok "titlebar plugin: $(cat "$BARS_OUT/hyprbars.abi")"
+    BARS_MISSING=0
+else
+    rm -rf "$BARS_OUT"
+    warn "the titlebar plugin was not built: the live system has no titlebars, installs build their own"
+    BARS_MISSING=1
+fi
+wipe "$BARS_ROOT"
+
 # ---------------------------------------------------------------- metadata ---
 python3 - "$PROFILE/profiledef.sh" <<'PY'
 import sys, pathlib
@@ -713,3 +737,4 @@ if [[ "${KEEP_WORK:-0}" != "1" ]]; then
 fi
 ls -lh "$DEST"
 info "sha256: $(sha256sum "$DEST" | cut -d' ' -f1)"
+if [[ "$BARS_MISSING" == 1 ]]; then warn "this ISO has no titlebar plugin (see the log)"; fi
