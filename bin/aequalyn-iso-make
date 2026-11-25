@@ -481,6 +481,12 @@ mkdir -p "$SKEL/.config/aequalyn/current"
 ln -sfn /usr/share/aequalyn/themes/aequalyn "$SKEL/.config/aequalyn/current/theme"
 [[ -f "$PROJECT/themes/aequalyn/backgrounds/1-night-aequalyn.jpg" ]] \
     || abort "the Aequalyn night wallpaper is missing from the theme bundle"
+# Chromium has that theme's colour already, as aequalyn-browser-theme publishes it: the
+# live session does not open with a request for the admin password
+base=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["palette"]["bgBase"].lower())' "$PROJECT/themes/aequalyn/theme.json")
+[[ "$base" =~ ^#[0-9a-f]{6}$ ]] || abort "the Aequalyn theme has no base colour"
+mkdir -p "$PROFILE/airootfs/etc/chromium/policies/managed"
+printf '{"BrowserThemeColor": "%s"}\n' "$base" > "$PROFILE/airootfs/etc/chromium/policies/managed/color.json"
 
 # The core settings.json pins a generic dock list. On the live ISO pin the
 # apps that are actually installed, plus the "Install Aequalyn" launcher.
