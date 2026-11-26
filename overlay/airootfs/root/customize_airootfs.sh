@@ -170,7 +170,7 @@ if [[ ! -f /etc/sddm.conf.d/autologin.conf ]]; then
 [Autologin]
 User=live
 Session=aequalyn
-Relogin=true
+Relogin=false
 EOF
 fi
 systemctl enable sddm.service 2>/dev/null || true

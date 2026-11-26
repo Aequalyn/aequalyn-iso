@@ -16,6 +16,12 @@
 #      instance. If it forks another (crash/restart loop) the launcher is
 #      stopped, so SDDM shows the greeter instead of the machine freezing.
 #
+# Log out: SDDM's Relogin is off (it would loop on a desktop that cannot start),
+# so aequalyn-logout leaves $XDG_RUNTIME_DIR/aequalyn-relogin and stops
+# start-hyprland; this script then sweeps the login and starts a fresh desktop
+# (no greeter, as on boot). Without the marker it exits and SDDM shows its
+# greeter.
+#
 # QuickShell is started once (aequalyn-session-start, also called from
 # hyprland.lua). That script is idempotent and uses `qs -n`, so at most one
 # shell ever runs.
@@ -116,17 +122,12 @@ start_shell() {
     env "${e[@]}" setsid -f bash "$HOME/.local/bin/aequalyn-session-start" \
         9>&- >/dev/null 2>&1 || say "aequalyn-session-start failed to spawn"
 }
-start_shell 9>&- &
 
 # ------------------------------------------------------- Hyprland (once)
 # Hyprland 0.57 creates $XDG_RUNTIME_DIR/hypr/<signature>/ on every start.
-# Snapshot the signatures that predate this session, then allow exactly one new
+# Snapshot the signatures that predate this desktop, then allow exactly one new
 # one. A second new signature means start-hyprland restarted the compositor:
 # stop the launcher rather than letting it fork Hyprland forever.
-known=" "
-for f in "$XDG_RUNTIME_DIR"/hypr/*; do
-    [[ -d "$f" ]] && known+="${f##*/} "
-done
 
 cap_hyprland_instances() {
     local launcher=$1 first="" f sig
@@ -149,14 +150,29 @@ cap_hyprland_instances() {
     return 0
 }
 
-say "starting start-hyprland (one Hyprland instance only)"
-# 9>&- : neither Hyprland nor anything it spawns inherits the session lock.
-start-hyprland 9>&- &
-launcher=$!
-cap_hyprland_instances "$launcher" 9>&- &
-cap_pid=$!
-wait "$launcher"; rc=$?
-kill "$cap_pid" 2>/dev/null || true
-wait "$cap_pid" 2>/dev/null || true
-say "start-hyprland exited with status $rc"
+MARKER="$XDG_RUNTIME_DIR/aequalyn-relogin"
+STATE="$XDG_RUNTIME_DIR/aequalyn-session.pid"
+while :; do
+    rm -f "$MARKER"
+    start_shell 9>&- &
+    known=" "
+    for f in "$XDG_RUNTIME_DIR"/hypr/*; do
+        [[ -d "$f" ]] && known+="${f##*/} "
+    done
+    say "starting start-hyprland (one Hyprland instance only)"
+    # 9>&- : neither Hyprland nor anything it spawns inherits the session lock.
+    start-hyprland 9>&- &
+    launcher=$!
+    printf '%s %s %s\n' "$$" "$launcher" "${XDG_SESSION_ID:-}" > "$STATE"
+    cap_hyprland_instances "$launcher" 9>&- &
+    cap_pid=$!
+    wait "$launcher"; rc=$?
+    kill "$cap_pid" 2>/dev/null || true
+    wait "$cap_pid" 2>/dev/null || true
+    say "start-hyprland exited with status $rc"
+    [[ -f "$MARKER" ]] || break
+    say "log out with autologin on: starting a fresh desktop"
+    "$HOME/.local/bin/aequalyn-logout" sweep 9>&-
+done
+rm -f "$STATE" "$MARKER"
 exit "$rc"
