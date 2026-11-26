@@ -22,6 +22,9 @@
 # (no greeter, as on boot). Without the marker it exits and SDDM shows its
 # greeter.
 #
+# Every exit is 0: sddm-helper exits with the session's code, and SDDM reads 1
+# as an authentication error and never restarts the greeter (a black screen).
+#
 # QuickShell is started once (aequalyn-session-start, also called from
 # hyprland.lua). That script is idempotent and uses `qs -n`, so at most one
 # shell ever runs.
@@ -58,7 +61,7 @@ say "invoked (pid $$, user $(id -un), runtime $XDG_RUNTIME_DIR)"
 # FD 9 is held by this process for its whole lifetime; every child closes it so
 # a daemonized QuickShell can never keep the lock after the session is gone.
 LOCK="$XDG_RUNTIME_DIR/aequalyn-live-session.lock"
-exec 9>"$LOCK" || exit 1
+exec 9>"$LOCK" || exit 0
 if ! flock -n 9; then
     say "another live session holds $LOCK; refusing a second Hyprland"
     exit 0
@@ -71,7 +74,7 @@ say "single-instance lock acquired"
 
 if ! command -v start-hyprland >/dev/null 2>&1; then
     say "start-hyprland not found in PATH; nothing to start"
-    exit 1
+    exit 0
 fi
 
 # --------------------------------------------------------------- QuickShell
@@ -175,4 +178,4 @@ while :; do
     "$HOME/.local/bin/aequalyn-logout" sweep 9>&-
 done
 rm -f "$STATE" "$MARKER"
-exit "$rc"
+exit 0

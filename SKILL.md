@@ -55,7 +55,7 @@ for the installer, bundles an offline package repository, and writes the ISO to 
 
 ## Live session
 
-- SDDM is display manager: `etc/sddm.conf.d/aequalyn-theme.conf` sets `Current=aequalyn`; `autologin.conf` autologs `live` into the `aequalyn` Wayland session (`Relogin=false`; log out gets a fresh desktop from `aequalyn-live-session` via `aequalyn-logout`, so a crash lands on the greeter instead of looping).
+- SDDM is display manager: `etc/sddm.conf.d/aequalyn-theme.conf` sets `Current=aequalyn`; `autologin.conf` autologs `live` into the `aequalyn` Wayland session (`Relogin=false`; log out gets a fresh desktop from `aequalyn-live-session` via `aequalyn-logout`, so a crash lands on the greeter instead of looping). The wrapper always exits 0: SDDM reads a session exit of 1 as an auth error and never restarts the greeter (black screen).
 - `wayland-sessions/aequalyn.desktop` runs `/usr/local/bin/aequalyn-live-session`.
 - Guarded single-instance launcher: exclusive flock, pgrep pre-flight, caps `start-hyprland` to one instance; waits for `$XDG_RUNTIME_DIR/bus`, then spawns `aequalyn-session-start` once.
 - Root rescue shell: `getty@tty2.service.d/autologin.conf` runs `agetty --autologin root`.
