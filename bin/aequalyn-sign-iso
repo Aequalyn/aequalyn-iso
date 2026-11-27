@@ -1,0 +1,234 @@
+#!/usr/bin/env bash
+# aequalyn-sign-iso -- interactive menu to GPG-sign an Aequalyn ISO.
+#
+# A SEPARATE step from building (bin/aequalyn-iso-make). It signs the finished
+# .iso with a GPG *detached* signature (aequalyn-…-x86_64.iso.sig, or .asc
+# armor), can create/list/export a signing key, verify a signature, and write
+# a portable SHA-256 checksum. A signature proves authenticity + integrity;
+# a .sha256 checksum proves integrity only. Verify a signature on the whole
+# re-assembled ISO, not on individual split parts.
+#
+#   ./bin/aequalyn-sign-iso [ISO]           # optional: pick the ISO up front
+#
+# Uses the CURRENT user's GPG keyring ($GNUPGHOME or ~/.gnupg). NOTE:
+# aequalyn-iso-make builds as ROOT, so release/ and the ISO are root-owned;
+# run this script as the same user, or sudo, or `sudo chown` release/ so a
+# .sig can be written next to the ISO. Keep the PRIVATE key secret.
+#
+# No root needed for signing itself.
+set -euo pipefail
+
+R='\033[0;31m'; G='\033[0;32m'; B='\033[0;34m'; Y='\033[0;33m'; N='\033[0m'
+info() { echo -e "${B}INFO:${N} $*"; }
+ok()   { echo -e "${G}OK:${N} $*"; }
+warn() { echo -e "${Y}WARN:${N} $*"; }
+err()  { echo -e "${R}ERROR:${N} $*" >&2; }
+
+ISO_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RELEASE="$ISO_REPO/release"
+
+# ------------------------------ helpers ------------------------------------
+
+# confirm "question" -> 0 if yes (interactive; default no)
+confirm() {
+    local reply=""
+    read -rp "$1 [y/N]: " reply || true
+    [[ "${reply:-}" =~ ^[Yy]([Ee][Ss])?$ ]]
+}
+
+# list secret keys, one per line: "KEYID  uid"
+secret_keys() {
+    gpg --list-secret-keys --keyid-format=long --with-colons 2>/dev/null |
+    awk -F: '
+        /^sec:/ { key=$5; uid="" }
+        /^uid:/ && uid=="" { uid=$10; print key"  "uid }
+        /^fpr:/ && key!="" && uid=="" { }
+    ' || true
+}
+
+# find ISO files
+list_isos() {
+    local extra=("$@")
+    find "$RELEASE" -maxdepth 1 -type f -name '*.iso' 2>/dev/null | sort
+    for p in "${extra[@]:-}"; do [[ -n "$p" ]] && printf '%s\n' "$p"; done
+}
+
+# pick an ISO -> echoes path on stdout
+pick_iso() {
+    local preset="${1:-}"
+    local -a isos=()
+    mapfile -t isos < <(list_isos "$preset")
+    # de-dup
+    local -A seen=(); local -a uniq=(); local p
+    for p in "${isos[@]:-}"; do
+        [[ -n "$p" && -z "${seen[$p]:-}" ]] && { seen[$p]=1; uniq+=( "$p" ); }
+    done
+    isos=()
+    (( ${#uniq[@]} > 0 )) && isos=( "${uniq[@]}" )
+
+    if (( ${#isos[@]} == 0 )); then
+        warn "no .iso found in $RELEASE"
+        read -rp "Path to an ISO: " p || true
+        [[ -n "${p:-}" && -f "$p" ]] || { err "no such ISO: ${p:-}"; return 1; }
+        printf '%s\n' "$p"; return 0
+    fi
+    if (( ${#isos[@]} == 1 )); then printf '%s\n' "${isos[0]}"; return 0; fi
+
+    echo "Choose ISO:" >&2
+    local i=1
+    for p in "${isos[@]}"; do printf '  %d) %s\n' "$i" "${p##*/}" >&2; ((i++)); done
+    printf '  %d) enter a path\n' "$i" >&2
+    local choice=""
+    read -rp "Choice [1]: " choice || true
+    choice="${choice:-1}"
+    if [[ "$choice" == "$i" ]]; then
+        read -rp "Path to an ISO: " p || true
+        [[ -n "${p:-}" && -f "$p" ]] || { err "no such ISO: ${p:-}"; return 1; }
+        printf '%s\n' "$p"; return 0
+    fi
+    [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice < i )) || { err "invalid choice"; return 1; }
+    printf '%s\n' "${isos[choice-1]}"
+}
+
+# choose a signing key -> echoes KEYID on stdout (empty = GPG default key)
+pick_key() {
+    local -a keys=(); local line
+    mapfile -t keys < <(secret_keys)
+    if (( ${#keys[@]} == 0 )); then
+        warn "no secret keys in your keyring yet"
+        printf '%s\n' ""; return 0
+    fi
+    echo "Choose signing key:" >&2
+    local i=1
+    for line in "${keys[@]}"; do printf '  %d) %s\n' "$i" "$line" >&2; ((i++)); done
+    printf '  %d) GPG default key\n' "$i" >&2
+    local choice=""
+    read -rp "Choice [1]: " choice || true
+    choice="${choice:-1}"
+    if [[ "$choice" == "$i" ]]; then printf '%s\n' ""; return 0; fi
+    [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice < i )) || { err "invalid choice"; return 1; }
+    printf '%s\n' "${keys[choice-1]%% *}"
+}
+
+# ------------------------------ actions ------------------------------------
+
+action_sign() {
+    local iso keyid fmt sig
+    iso="$(pick_iso "${1:-}")" || return 1
+    keyid="$(pick_key)" || return 1
+
+    echo "Output format:"
+    echo "  1) binary detached signature (.sig)   [recommended]"
+    echo "  2) ASCII-armored signature (.asc)"
+    local fmt_choice=""; read -rp "Choice [1]: " fmt_choice || true
+    local -a armor=(); local ext="sig"
+    if [[ "${fmt_choice:-1}" == "2" ]]; then armor=(--armor); ext="asc"; fi
+
+    sig="$iso.$ext"
+    local -a signer=(); [[ -n "$keyid" ]] && signer=(--local-user "$keyid")
+
+    info "signing $(basename "$iso") → $(basename "$sig")"
+    gpg --batch --yes --detach-sign "${armor[@]}" "${signer[@]}" \
+        --output "$sig" "$iso"
+    ok "signature written: $sig"
+
+    # immediate self-check
+    if gpg --verify "$sig" "$iso" 2>&1; then ok "verification passed"; else err "verification FAILED"; fi
+}
+
+action_verify() {
+    local iso sig
+    iso="$(pick_iso "${1:-}")" || return 1
+    local guess=""
+    if   [[ -f "$iso.sig" ]]; then guess="$iso.sig"
+    elif [[ -f "$iso.asc" ]]; then guess="$iso.asc"; fi
+    sig="$guess"
+    read -rp "Signature file [${sig:-<enter path>}]: " sig || true
+    sig="${sig:-$guess}"
+    [[ -n "${sig:-}" && -f "$sig" ]] || { err "no signature file"; return 1; }
+    if gpg --verify "$sig" "$iso"; then ok "GOOD signature"; else err "BAD signature / verification failed"; return 1; fi
+}
+
+action_create_key() {
+    local name email curve
+    read -rp "Name [Aequalyn]: " name || true; name="${name:-Aequalyn}"
+    read -rp "Email [releases@aequalyn.org]: " email || true; email="${email:-releases@aequalyn.org}"
+    echo "Key type: 1) ed25519 (recommended)   2) RSA-4096"
+    local k=""; read -rp "Choice [1]: " k || true
+    if [[ "${k:-1}" == "2" ]]; then
+        gpg --batch --pinentry-mode loopback --passphrase '' \
+            --quick-generate-key "$name <$email>" rsa4096 sign 2y
+    else
+        gpg --batch --pinentry-mode loopback --passphrase '' \
+            --quick-generate-key "$name <$email>" ed25519 sign 2y
+    fi
+    ok "key created for $name <$email>"
+    warn "add a passphrase later if you want one; keep the private key secret and backed up."
+}
+
+action_export_pubkey() {
+    local keyid out
+    keyid="$(pick_key)" || return 1
+    out="$RELEASE/aequalyn-release.asc"
+    read -rp "Output file [$out]: " out || true; out="${out:-$RELEASE/aequalyn-release.asc}"
+    if [[ -n "$keyid" ]]; then
+        gpg --export --armor "$keyid" > "$out"
+    else
+        gpg --export --armor > "$out"
+    fi
+    if [[ -s "$out" ]]; then ok "public key written: $out"; else err "no key exported"; rm -f "$out"; return 1; fi
+}
+
+action_checksum() {
+    local iso
+    iso="$(pick_iso "${1:-}")" || return 1
+    ( cd "$(dirname "$iso")" && sha256sum "$(basename "$iso")" > "$(basename "$iso").sha256" )
+    ok "SHA-256 written: $iso.sha256"
+}
+
+action_list_keys() {
+    if [[ -z "$(secret_keys)" ]]; then warn "no secret keys"; else
+        echo "Secret keys in your keyring:"; secret_keys | sed 's/^/  /'
+    fi
+}
+
+# ------------------------------ menu ---------------------------------------
+
+main() {
+    local preset="${1:-}"
+    if [[ ! -t 0 ]]; then
+        err "aequalyn-sign-iso is interactive; run it in a terminal"
+        exit 1
+    fi
+    command -v gpg >/dev/null 2>&1 || { err "gpg is not installed"; exit 1; }
+
+    while true; do
+        echo
+        echo -e "${B}Aequalyn ISO signer${N}"
+        echo "  keyring: ${GNUPGHOME:-$HOME/.gnupg}"
+        echo
+        echo "  1) Sign an ISO (GPG detached signature: .sig / .asc)"
+        echo "  2) Verify an ISO signature"
+        echo "  3) Create a new signing key"
+        echo "  4) List secret keys"
+        echo "  5) Export public key (aequalyn-release.asc)"
+        echo "  6) Generate SHA-256 checksum for an ISO"
+        echo "  q) Quit"
+        echo
+        local choice=""
+        read -rp "Choice: " choice || true
+        case "${choice:-}" in
+            1) action_sign "$preset" || err "sign failed"; preset="" ;;
+            2) action_verify "$preset" || err "verify failed"; preset="" ;;
+            3) action_create_key || err "key creation failed" ;;
+            4) action_list_keys ;;
+            5) action_export_pubkey || err "export failed" ;;
+            6) action_checksum "$preset" || err "checksum failed"; preset="" ;;
+            q|Q|quit|exit) echo "bye"; return 0 ;;
+            "") ;;
+            *) err "unknown choice" ;;
+        esac
+    done
+}
+
+main "$@"
