@@ -736,5 +736,58 @@ if [[ "${KEEP_WORK:-0}" != "1" ]]; then
     info "freed mkarchiso's work tree (KEEP_WORK=1 keeps it)"
 fi
 ls -lh "$DEST"
-info "sha256: $(sha256sum "$DEST" | cut -d' ' -f1)"
 if [[ "$BARS_MISSING" == 1 ]]; then warn "this ISO has no titlebar plugin (see the log)"; fi
+
+# ------------------------------ checksum -----------------------------------
+# SHA-256 checksum file next to the ISO, portable (just the basename, so
+# `sha256sum -c` works from inside release/).
+SHA="$DEST.sha256"
+( cd "$(dirname "$DEST")" && sha256sum "$(basename "$DEST")" > "$(basename "$SHA")" )
+ok "SHA-256 written: $SHA"
+ls -lh "$SHA"
+
+# ------------------------------ split + release ----------------------------
+# Interactive prompts. Non-interactive runs (no tty) default to NO.
+confirm() {  # confirm "question" -> 0 if yes
+    local reply=""
+    [[ -t 0 ]] || return 1
+    read -rp "$1 [y/N]: " reply || true
+    [[ "${reply:-}" =~ ^[Yy]([Ee][Ss])?$ ]]
+}
+
+SPLIT_PARTS=()
+if confirm "Split the ISO into <2 GiB .00x parts (.001, .002, .003, …) for uploading?"; then
+    # raw byte-split, ordered, numeric 3-digit suffix starting at 1
+    split -d -a 3 --numeric-suffixes=1 -b 1900M "$DEST" "$DEST."
+    shopt -s nullglob
+    SPLIT_PARTS=( "$DEST".[0-9][0-9][0-9] )
+    shopt -u nullglob
+    ok "split into ${#SPLIT_PARTS[@]} parts: $(printf '%s ' "${SPLIT_PARTS[@]##*/}")"
+    info "re-assemble with:  cat $(basename "$DEST").* > $(basename "$DEST")   (or Windows copy /b)"
+fi
+
+ASSETS=()
+if (( ${#SPLIT_PARTS[@]} > 0 )); then
+    ASSETS+=( "${SPLIT_PARTS[@]}" )
+else
+    ASSETS+=( "$DEST" )
+fi
+ASSETS+=( "$SHA" )
+
+if confirm "Push to GitHub Releases (gh release create + upload ${#ASSETS[@]} asset(s))?"; then
+    command -v gh >/dev/null 2>&1 || abort "gh (GitHub CLI) is not installed"
+    gh auth status >/dev/null 2>&1 || abort "gh is not authenticated (run: gh auth login)"
+    GH_REPO="${GH_REPO:-Aequalyn/aequalyn-iso}"
+    TAG=""
+    if [[ -t 0 ]]; then
+        read -rp "Release tag (e.g. v$(date +%Y.%m.%d)): " TAG || true
+    fi
+    [[ -n "${TAG:-}" ]] || abort "no release tag given"
+    if (( ${#SPLIT_PARTS[@]} == 0 )); then
+        warn "the unsplit ISO is ~6.5 GiB; GitHub Releases cap each file at 2 GiB — choose splitting, or upload will be rejected"
+    fi
+    gh release create "$TAG" "${ASSETS[@]}" \
+        --repo "$GH_REPO" --title "Aequalyn $TAG" --notes "Aequalyn ISO $TAG" \
+        || abort "gh release create failed"
+    ok "GitHub Release created on $GH_REPO: tag $TAG (${#ASSETS[@]} assets)"
+fi
