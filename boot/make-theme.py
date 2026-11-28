@@ -69,16 +69,21 @@ parts("select", "#1b3a38", ACC)
 for k, c in (("bar", "#1b2325"), ("fill", ACC)):
     png(f"grub-theme/{k}_c.png", 4, 28, f'<rect y="12" width="4" height="4" fill="{c}"/>')
 png("grub-theme/thumb_c.png", 4, 4, '<rect width="4" height="4" fill="#33413f"/>')
+# The terminal is where GRUB says "Booting ..." while it loads the kernel, and where E
+# edits an entry. GRUB will not make it smaller than about 80 x 24 characters, so it covers
+# the whole screen; its colour is set by background_color in grub.cfg (aequalyn-iso-make),
+# the background's own base, so choosing an entry leaves a calm, flat screen rather than
+# a black box over the menu.
 (HERE / "grub-theme/theme.txt").write_text('''# Aequalyn boot menu (drawn by boot/make-theme.py)
 title-text: ""
 desktop-image: "background.png"
 desktop-image-scale-method: "stretch"
 desktop-color: "#0c1113"
 terminal-font: "Unifont Regular 16"
-terminal-left: "10%"
-terminal-top: "10%"
-terminal-width: "80%"
-terminal-height: "80%"
+terminal-left: "0"
+terminal-top: "0"
+terminal-width: "100%"
+terminal-height: "100%"
 
 + image {
     left = 50%-170

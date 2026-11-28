@@ -278,6 +278,7 @@ for name in ("grub/grub.cfg", "grub/loopback.cfg"):
     terminal_output console
 """, """    terminal_input console
     terminal_output gfxterm
+    background_color "#0c1113"
     insmod gfxmenu
     insmod png
     set theme="/boot/grub/themes/aequalyn/theme.txt"
